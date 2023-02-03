@@ -1,0 +1,6 @@
+This is mostly a dump of some code, it's not polished or anything.
+
+I can sort of render the raw map with OpenGL but sorting is still a problem.
+Files are not included. Only PC files supported right now.
+
+The fake pddi backend is no longer functional. I only used it early in development.
