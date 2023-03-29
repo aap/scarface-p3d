@@ -33,7 +33,6 @@ struct Scene {
 	friend bool operator<(const Scene &sc1, const Scene &sc2) { return strcmp(sc1.drawable->GetName(), sc2.drawable->GetName()) < 0; }
 };
 
-std::vector<Scene> scenes;
 pure3d::CompositeDrawable *composite;
 std::vector<renderer::Renderable*> renderables;
 
@@ -290,67 +289,20 @@ InitApp(void)
 		"uginbar_01_detail.p3d",
 	};
 
-	std::vector<pure3d::CompositeDrawable*> composites;
-	std::vector<pure3d::CompositeDrawable*> lightcards;
 	content::LoadInventory *inv;
 	for(u32 i = 0; i < nelem(mapfiles); i++) {
 		char path[256];
 		sprintf(path, "../assets/packages/z04/%s", mapfiles[i]);
 		inv = content::loadManager->LoadFile(path, commonInv);
 
-		std::vector<pure3d::CompositeDrawable*> tmp;
-		std::vector<pure3d::CompositeDrawable*> shell;
-		std::vector<pure3d::CompositeDrawable*> detail;
-		std::vector<pure3d::CompositeDrawable*> underwater;
-		std::vector<pure3d::CompositeDrawable*> skylines;
-		std::vector<pure3d::CompositeDrawable*> rest;
-		inv->Collect(tmp);
-
 		u32 first = renderables.size();
 		inv->Collect(renderables);
-		for(u32 i = first; i < renderables.size(); i++) {
-//printf("renderable %s\n", renderables[i]->GetName());
+		for(u32 i = first; i < renderables.size(); i++)
 			renderables[i]->AddRef();
-		}
-
-		for(u32 i = 0; i < tmp.size(); i++) {
-			tmp[i]->AddRef();
-			if(strstr(tmp[i]->GetName(), "shell"))
-				shell.push_back(tmp[i]);
-			else if(strstr(tmp[i]->GetName(), "detail"))
-				detail.push_back(tmp[i]);
-			else if(strstr(tmp[i]->GetName(), "underwater"))
-				underwater.push_back(tmp[i]);
-			else if(strstr(tmp[i]->GetName(), "lightcard"))
-				lightcards.push_back(tmp[i]);
-			else if(strstr(tmp[i]->GetName(), "skyline"))
-				skylines.push_back(tmp[i]);
-			else
-				rest.push_back(tmp[i]);
-		}
-		composites.insert(composites.end(), underwater.begin(), underwater.end());
-		composites.insert(composites.end(), shell.begin(), shell.end());
-		composites.insert(composites.end(), skylines.begin(), skylines.end());
-		composites.insert(composites.end(), detail.begin(), detail.end());
-		composites.insert(composites.end(), rest.begin(), rest.end());
-
 		inv->Release();
 	}
-	composites.insert(composites.end(), lightcards.begin(), lightcards.end());
-//	composites.insert(composites.end(), skylines.begin(), skylines.end());
 	inv = nil;
 
-/*
-	printf("composites:\n");
-	for(u32 i = 0; i < composites.size(); i++) {
-		Scene sc = { composites[i], true };
-		scenes.push_back(sc);
-		printf("	composite %s\n", composites[i]->GetName());
-	}
-*/
-
-// doing this will mess with render order
-//	std::sort(scenes.begin(), scenes.end());
 
 //	inv = content::loadManager->LoadFile("../bacinari.p3d", commonInv);
 //	inv = content::loadManager->LoadFile("../tony_only_bacinari.p3d", commonInv);
@@ -360,15 +312,7 @@ InitApp(void)
 //	inv->Dump();
 
 
-//
 //	composite = inv->Find<pure3d::CompositeDrawable>("bacinari");
-	// havana_01_shell
-//	composite = inv->Find<pure3d::CompositeDrawable>("shells_hav01");
-//	composite = inv->Find<pure3d::CompositeDrawable>("skyline_hav01");
-	// havana_01_detail
-//	composite = inv->Find<pure3d::CompositeDrawable>("details_hav01");
-	// havana_01_detailB
-//	composite = inv->Find<pure3d::CompositeDrawable>("details_hav01db");
 /*
 	if(composite) {
 		printf("Found composite %s\n", composite->GetName());
@@ -378,11 +322,6 @@ InitApp(void)
 
 
 	commonInv->Release();
-
-//	inv->Release();
-//	regionInv->Release();
-//	miamiInv->Release();
-//	commonInv->Release();
 }
 
 using namespace pure3d;
@@ -404,7 +343,7 @@ struct {
 	const char *shader;
 } shaderRenderable[] = {
 	{ true, "error" },
-	{ false, "reflection" },
+	{ true, "reflection" },
 	{ true, "simple" },
 	{ true, "specular" },
 	{ true, "pointsprite" },
@@ -418,7 +357,7 @@ struct {
 	{ true, "character" },
 	{ true, "cbvlit" },
 	{ true, "vehicle" },
-	{ false, "shadowdecal" },
+	{ true, "shadowdecal" },
 	{ true, "vertexfade" },
 };
 
@@ -431,13 +370,31 @@ IsShadervisible(const char *name)
 	return true;
 }
 
+namespace renderer {
+extern bool displistvisible[renderer::NUM_DISPLAY_LISTS];
+extern int displistsize[renderer::NUM_DISPLAY_LISTS];
+extern int listorder[1000];
+extern int nlists;
+};
+
 void
 GUI(void)
 {
 	if(0) {
-		ImGui::Begin("Scenes");
-		for(u32 i = 0; i < scenes.size(); i++) {
-			ImGui::Checkbox(scenes[i].drawable->GetName(), &scenes[i].visible);
+		char lbl[64];
+		ImGui::Begin("Lists");
+		if(ImGui::Button("All")) {
+			for(int i = 0; i < renderer::NUM_DISPLAY_LISTS; i++)
+				renderer::displistvisible[i] = true;
+		}
+		if(ImGui::Button("None")) {
+			for(int i = 0; i < renderer::NUM_DISPLAY_LISTS; i++)
+				renderer::displistvisible[i] = false;
+		}
+		for(int j = 0; j < renderer::nlists; j++) {
+			int i = renderer::listorder[j];
+			sprintf(lbl, "%d - %d", i, renderer::displistsize[i]);
+			ImGui::Checkbox(lbl, &renderer::displistvisible[i]);
 		}
 		ImGui::End();
 	}
