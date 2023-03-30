@@ -304,6 +304,7 @@ InitApp(void)
 	inv = nil;
 
 
+/*
 //	inv = content::loadManager->LoadFile("../bacinari.p3d", commonInv);
 //	inv = content::loadManager->LoadFile("../tony_only_bacinari.p3d", commonInv);
 //	if(inv == nil)
@@ -312,14 +313,12 @@ InitApp(void)
 //	inv->Dump();
 
 
-//	composite = inv->Find<pure3d::CompositeDrawable>("bacinari");
-/*
+	composite = inv->Find<pure3d::CompositeDrawable>("bacinari");
 	if(composite) {
 		printf("Found composite %s\n", composite->GetName());
 		composite->AddRef();
 	}
 */
-
 
 	commonInv->Release();
 }
@@ -435,19 +434,9 @@ camPosition.x = -camPosition.x;
 	anim.e[0] = -1.0f;	// flip x
 	context->SetWorldMatrix(anim);
 
-/*
-	if(composite)
-		composite->Display();
-*/
-/*
-	for(u32 i = 0; i < scenes.size(); i++) {
-		if(scenes[i].visible) {
-			context->PushDebugName(scenes[i].drawable->GetName());
-			scenes[i].drawable->Display(nil, nil);
-			context->PopDebugName();
-		}
-	}
-*/
+//	if(composite)
+//		composite->Display(nil, nil);
+
 	for(u32 i = 0; i < renderables.size(); i++) {
 		context->PushDebugName(renderables[i]->GetName());
 		renderables[i]->Display();

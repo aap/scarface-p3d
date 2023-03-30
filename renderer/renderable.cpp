@@ -137,7 +137,6 @@ Renderable::Display(void)
 		Sphere sph = elements[i].prim.GetDrawable()->sphere;
 		float dist = Norm(sph.centre - camPosition) - sph.radius;
 		bool visible = dist < 500.0f;
-visible = true;
 
 		elements[i].prim.Display(visible);
 	}
