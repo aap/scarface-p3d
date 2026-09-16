@@ -17,5 +17,6 @@ typedef int8_t i8;
 
 u32 MakeKey(const char *str);
 u32 MakeKeyCI(const char *str);
+u32 GetHash(const char *str, u32 seed = 0);
 
 }

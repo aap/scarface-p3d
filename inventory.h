@@ -35,7 +35,7 @@ public:
 	void Add(u32 uid, IRefCount *obj);
 	IRefCount *Find(const BaseCaster &c, u32 uid);
 	template <class T> T *Find(u32 uid) { return (T*)Find(DynamicCaster<T>(), uid); }
-	template <class T> T *Find(const char *name) { return Find<T>(MakeKey(name)); }
+	template <class T> T *Find(const char *name) { return Find<T>(GetHash(name)); }
 	template <class T> void Collect(std::vector<T*> &vec) {
 	for(auto it = store->begin(); it != store->end(); it++) {
 			T *e = dynamic_cast<T*>(it->second);
