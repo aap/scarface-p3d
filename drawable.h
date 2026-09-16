@@ -27,8 +27,11 @@ public:
 	virtual bool IsLit(void) = 0;
 	virtual bool IsALUM(void) = 0;
 	virtual void UpdateBounds(void) {}
-	// SetFade
-	// SetCTNT
+	// retail: DrawablePrimitive vslot 14 [+0x38] and vslot 15 [+0x3c]. Display_List
+	// pushes the owning container's fade/tint into the primitive around the draw
+	// (notes/displaylist.md §4). Nothing in the GL backend consumes them yet.
+	virtual void SetFade(float fade) {}
+	virtual void SetTint(float tint) {}
 	// unknown
 
 	void SetLayer(u32 l) { layer = l; }
@@ -82,16 +85,22 @@ public:
 	virtual void SetFading(bool enable) {}
 	virtual void SetFadeAmount(float fade) {}
 	virtual bool IsFading(void) { return false; }
+	// retail: DrawableContainer vslot 19/20/21 [+0x4c]/[+0x50]/[+0x54]
 	virtual float GetFadeAmount(void) { return 0.0f; }
+	virtual float GetTint(void) { return 1.0f; }
 	// 4 virtuals
 };
 
 class DrawableContainer : public DrawableHierarchy
 {
-	// float unknown
 	DrawableHierarchy *parent;
 	Array<PrimEntry> prims;
 public:
+	// retail: DrawableContainer +0x3c, the class key Display_List::AddContainerElement
+	// copies into Node::sortKey (notes/renderable_classes.md §2). Observed in retail:
+	// Decal 0.0, Skidmark 0.0, Ocean 0.5, Wake 0.89; the base ctor value is 0.5.
+	float sortKey;
+
 	DrawableContainer(i32 nPrim);
 	void SetParent(DrawableHierarchy *p) { parent = p; }
 	PrimEntry *GetElement(i32 n) { return &prims[n]; }

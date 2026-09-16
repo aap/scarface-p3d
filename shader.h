@@ -76,12 +76,21 @@ public:
 	void SetVector(u32 param, const pddiVector &vec) { shader->SetVector(param, vec); }
 	void SetMatrix(u32 param, const pddiMatrix &mat) { shader->SetMatrix(param, mat); }
 
-	// What the hell?
-	bool IsXXXBlendMode(void) {
+	// retail: pure3d::Shader::IsSortedBlendMode ? 0x458ae0 --- "this needs to be drawn
+	// in the sorted/blended buckets"
+	bool IsSortedBlendMode(void) {
 		return blendMode == PDDI_BLEND_ALPHA ||
 			blendMode == PDDI_BLEND_ADD ||
 			blendMode == PDDI_BLEND_SUBTRACT ||
 			blendMode == PDDI_BLEND_SUBMODULATEALPHA;
+	}
+	// retail: pure3d::Shader::IsModulateBlendMode ? 0x458b00 --- used for the 0.5f sort
+	// key of the layer-1 water lists
+	bool IsModulateBlendMode(void) {
+		return blendMode == PDDI_BLEND_ADD ||
+			blendMode == PDDI_BLEND_MODULATE ||
+			blendMode == PDDI_BLEND_MODULATE2 ||
+			blendMode == PDDI_BLEND_ADDMODULATEALPHA;
 	}
 	bool IsBlendAddSub(void) {
 		return blendMode == PDDI_BLEND_ADD ||

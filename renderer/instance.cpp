@@ -1,13 +1,12 @@
 #include "instance.h"
 #include "display_list.h"
 #include "../shader.h"
+#include "../pddi.h"
 
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
 #include <map>
-
-extern math::Vector camPosition;
 
 namespace renderer
 {
@@ -63,7 +62,9 @@ InstanceRenderable::InstanceRenderable(void)
    cullMin(0.0f), cullMax(0.0f), fadeDist(0.0f),
    shape(nil), lodShape(nil)
 {
-	typeMask = 0x200;
+	typeMask = TYPE_INSTANCE;
+	// retail: the ctor clears flags80 & ~3 --- no distance test and no fade; the cull
+	// radius is installed afterwards by InstanceRenderable_SetCullDistance (0x463f80)
 }
 
 InstanceRenderable::~InstanceRenderable(void)
@@ -198,6 +199,8 @@ InstanceRenderable::Display(void)
 	// retail: near band end = (farEnd - D)*0.6 + radius, cross-fading over max(0.3*range, 20)
 	float nearEnd = lodShape ? maxDist*0.6f + shape->sphere.radius : maxDist;
 	float nearSq = nearEnd*nearEnd + 900.0f;
+	Vector camPosition;
+	View_GetCullingCamera()->GetPosition(&camPosition);
 	static int dbg = 0;
 	const char *dm = getenv("P3D_DEBUGMODEL");
 	if(dm && dbg < 3 && modelName == dm) {
@@ -211,6 +214,10 @@ InstanceRenderable::Display(void)
 				sqrtf((loc.position.x-camPosition.x)*(loc.position.x-camPosition.x)+(loc.position.z-camPosition.z)*(loc.position.z-camPosition.z)));
 		}
 	}
+	// the placements carry their own matrix (DisplayListPrimitive::SetInstanceMatrix),
+	// so the world matrix the nodes capture must be the renderable's own --- identity.
+	context->PushWorldMatrix();
+	context->SetWorldMatrix(matrix);
 	for(u32 i = 0; i < locations.size(); i++) {
 		InstanceLocation &loc = locations[i];
 		float dx = loc.position.x - camPosition.x;
@@ -219,6 +226,7 @@ InstanceRenderable::Display(void)
 		loc.prim.Display(d2 < nearSq);
 		if(lodShape) loc.lodPrim.Display(d2 < maxSq);
 	}
+	context->PopWorldMatrix();
 }
 
 

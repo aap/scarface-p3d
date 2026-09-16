@@ -45,7 +45,7 @@ Key facts so far
   - PS2 ELF (SLES_541.82) has no symbols but has demangled class-name strings ("renderer::WorldGeoRenderable") from a custom RTTI.
   - SHR-era Pure3D source: /u/aap/fun/ps2engines/extracted/pure3d (constants/chunkids.hpp has the chunk id ranges)
 
-Implemented in the repo from these notes (2026-09-15)
+Implemented in the repo from these notes (2026-09-15, renderer:: restructured 2026-09-16)
   - core::GetHash (retail 0x6dc190) is now the inventory UID key; MakeKey/MakeKeyCI kept for joints.
   - renderer/zonepkg.*: 0x8800004/0x8800009 ZonePkg loader -> per-world-geo draw distances + otherPosition.
     Renderable::Display now honours drawDist min/max (distance clamped at 0 inside the sphere).
@@ -57,10 +57,35 @@ Implemented in the repo from these notes (2026-09-15)
     The InstanceShape mesh is only the wind-swayed crown; the trunk exists only in <model>LODShape (whole
     tree). Retail draws both from distance 0 and only the LODShape past the near band (notes/renderspine.md
     §5.4); the viewer does the same with two DisplayListPrimitives per placement (near band = 0.6*cull + radius).
-  - renderer/display_list.cpp: retail depth-write states (SetZWrite(false) around lists 3,17,18,4,75,5,19,20,6,11,12;
-    pddiContext::SetZWrite added) and a far-to-near depth sort of the fading lists retail sorts (51 54 65 66 70 71 83)
-    plus the plain alpha-blended lists (which retail draws unsorted; P3D_SORTBLEND=0 to disable). Foliage shaders are
-    blmd1/atst0 in retail too, so there is no alpha test to enable (notes/shaderstate.md).
+  - renderer/ now reads like the retail namespace (see renderer/README.md for the guided tour).
+    Every non-obvious function carries a "// retail: renderer::Foo::Bar 0x4xxxxx" comment.
+      display_list.*  Display_List with the real Node (matrix, sortKey, sortKey2, elem, container,
+        shader, parent, list link, parent link, self), the 84 lists with per-list DIRTY flags,
+        AddContainerElement with the complete layer->list table incl. the layer-2 (shadow) case and
+        the fade/sort-key writes, per-node IsNodeVisible (frustum + an occlude::IsBoxVisible hook that
+        always passes: no occluders loaded), SortAllLists with the four retail policies per list
+        (CmpShader / CmpKeyThenDepth after ComputeDepthKeys / CmpKeyThenMaterial / CmpKey),
+        RenderList(list, applyFade) and Render() as the 28 numbered groups of notes/displaylist.md §1
+        with their SetZWrite/SetColourWrite state, FreeOrphanNodes at the end of the frame.
+        pddiContext::SetColourWrite added (gl: glColorMask). aap's extra depth sort of the non-fading
+        blended lists (P3D_SORTBLEND) is gone: the retail policies cover it.
+      renderable.*  Renderable with the retail fields and flag names (typeMask/sceneId/uniqueId/
+        elements/fade state), Renderable::Display per notes/renderspine.md §2.2 (distance ref pos with
+        the WorldGeo override, min/max/fade band, frustum test against the CULLING camera, fade amount
+        driving SetFading/SetFadeAmount), Tick/Update/Display/Hide/SetMatrix/GetPosition/
+        GetDistanceRefPos/SetFadeDist(a TIME)/UpdateFade, and DisplayListPrimitive with the
+        edge-triggered Display(bool) / SetVisible(bool) / RemoveFromList semantics.
+      render_manager.*  RenderManager (4 scenes, 2 canvases, GetHeap stub, deferred-destroy queue),
+        Scene/GamePlayScene, Canvas (fog + UpdateFog), RenderableHandle (weak ref + uniqueId check).
+      view.*  Camera (position + the six frustum planes) and the culling/rendering camera pair;
+        p3dview drives the frame through RenderManager::Update -> DestroyPendingRenderables -> Render.
+    Two deliberate deviations, both marked in the code: node matrices are native and the viewer's x
+    flip is re-applied by the list walks (which is exactly the mechanism RenderReflection uses), and
+    Renderable::Display measures the draw distance to the element's bounding SPHERE, not to the
+    reference point --- retail gets away with the point because details_/shells_/skyline_/low_LOD_
+    world geo never reaches the base Display, it goes through WorldGeoRenderable::Display (0x471640),
+    which culls and fades the sub-primitives one by one. Using the point without that path culls half
+    the map.
     Debug envs: P3D_ONLYMODEL=<substr> (render only those instance models), P3D_HIDELIST=a,b,c (hide display
     lists), P3D_DEBUGMODEL=<modelname> (print placements).
   - primgroup.cpp: NORMALLIST was gated on PDDI_V_POSITION instead of PDDI_V_NORMAL (latent nil deref).

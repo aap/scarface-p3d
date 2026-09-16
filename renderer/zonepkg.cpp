@@ -10,7 +10,17 @@ using namespace pure3d;
 ZonePkgRenderable::ZonePkgRenderable(void)
  : Renderable(0)
 {
-	typeMask = 0x8000;
+	typeMask = TYPE_ZONEPKG;
+}
+
+// retail: renderer::ZonePkgRenderable::SetVisible 0x471bc0
+void
+ZonePkgRenderable::SetVisible(bool visible)
+{
+	isVisible = visible;
+	for(u32 i = 0; i < worldGeos.Size(); i++)
+		if(worldGeos[i])
+			worldGeos[i]->SetVisible(visible);
 }
 
 ZonePkgRenderable::~ZonePkgRenderable(void)

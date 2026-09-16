@@ -299,7 +299,9 @@ public:
 	virtual void PopDebugName(void) {}
 
 	virtual void DrawPrimBuffer(pddiShader *mat, pddiPrimBuffer *buf) = 0;
+	// retail: pddiRenderContext +0x118 SetZWrite (d3d 0x64b990), +0x100 SetColourWrite (0x64b8d0)
 	virtual void SetZWrite(bool enable) {}
+	virtual void SetColourWrite(bool r, bool g, bool b, bool a) {}
 };
 extern pddiContext *context;
 

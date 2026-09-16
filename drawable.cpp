@@ -21,9 +21,8 @@ int cmpDrawablePrim(const void *p1, const void *p2)
 }
 
 DrawableContainer::DrawableContainer(i32 nPrim)
- : parent(this), prims(nPrim)
+ : parent(this), prims(nPrim), sortKey(0.5f)
 {
-	// unknown = 0.5f
 }
 
 void

@@ -152,10 +152,17 @@ ShowRenderable(renderer::Renderable *r)
 	if(ImGui::Button("jump") && r->elements.Size() > 0 && r->elements[0].prim.GetDrawable())
 		JumpTo(r->elements[0].prim.GetDrawable()->sphere);
 	Label("typeMask", "0x%x", r->typeMask);
+	Label("scene", "%d", r->sceneId);
+	// renderer::Renderable flags80/flags81, see re/notes/rendercore.md §6.1
+	Label("flags", "%s%s%s%s%s", r->doDistanceTest ? "distTest " : "", r->doFade ? "fade " : "",
+		r->hasHandle ? "handle " : "", r->isInsideRoom ? "inRoom " : "",
+		r->shareLastElementFarDist ? "shareFarDist" : "");
+	if(r->fade > 0.0f || r->fade2 > 0.0f)
+		Label("fade", "%.2f / %.2f  target %.2f  time %.0f", r->fade, r->fade2, r->fadeTarget, r->fadeTime);
 	for(u32 i = 0; i < r->elements.Size(); i++) {
 		renderer::DisplayListElement &e = r->elements[i];
 		DrawableHierarchy *d = e.prim.GetDrawable();
-		ImGui::Text("element %d: draw %.0f..%.0f fade %.0f", i, e.drawDist[0], e.drawDist[1], e.drawDist[2]);
+		ImGui::Text("element %d: draw %.0f..%.0f fade %.0f%s", i, e.drawDistMin, e.drawDistMax, e.drawDistFade, e.isFading ? "  (fading)" : "");
 		if(d) SelectableObject(d->GetName(), d, &d->sphere, &d->box);
 	}
 }

@@ -13,6 +13,7 @@
 #include "p3dview.h"
 #include "camera.h"
 #include "../renderer/display_list.h"
+#include "../renderer/render_manager.h"
 
 namespace renderer { extern bool displistvisible[NUM_DISPLAY_LISTS]; }
 
@@ -26,7 +27,6 @@ using namespace core;
 
 Input input;
 CCamera camera;
-extern math::Vector camPosition;
 
 float timeStep, avgTimeStep;
 float windowWidth, windowHeight;
@@ -56,7 +56,9 @@ void
 InitApp(void)
 {
 	pure3d::InitDevice();
-	new renderer::Display_List(200000);
+	// retail: renderer::Init (0x465120) makes the RenderManager and calls Init, which
+	// builds the four scenes; GamePlayScene's ctor makes the Display_List.
+	(new renderer::RenderManager)->Init(65536, 200000);
 	// P3D_HIDELIST=a,b,c hides display lists (debugging)
 	if(const char *h = getenv("P3D_HIDELIST"))
 		for(const char *p = h; *p; ) { renderer::displistvisible[atoi(p)] = false; while(*p && *p != ',') p++; if(*p) p++; }
@@ -322,8 +324,11 @@ InitApp(void)
 		RegisterShapes(inv);
 		u32 first = renderables.size();
 		inv->Collect(renderables);
-		for(u32 i = first; i < renderables.size(); i++)
+		for(u32 i = first; i < renderables.size(); i++) {
 			renderables[i]->AddRef();
+			// retail: every creator ends with scenes[scene]->AddRenderable(r)
+			renderer::g_renderMgr->scenes[renderer::RenderManager::GAMEPLAY_SCENE]->AddRenderable(renderables[i]);
+		}
 		// keep the inventory for the explorer (the loader gave us a reference)
 		loadedFiles.push_back(LoadedFile{mapfiles[i], inv});
 	}
@@ -476,30 +481,30 @@ RenderScene(void)
 
 	context->Begin();
 
-camPosition = camera.m_position;
-camPosition.x = -camPosition.x;
-	renderer::Display_List::sortCamPosition = camera.m_position;
-
 	context->SetProjectionMatrix(camera.m_projMat);
 	context->SetViewMatrix(camera.m_viewMat);
 
-	static float animangle;
-	animangle += 0.01f;
-	Quaternion q; q.FromAxisAngle(0.0f, 1.0f, 0.0f, animangle);
-	Matrix anim; anim.Identity();// q.SetMatrix(anim);
+	Matrix flip; flip.Identity();
+	flip.e[0] = -1.0f;	// the viewer draws the world with x flipped
+	context->SetWorldMatrix(flip);
 
-	anim.e[0] = -1.0f;	// flip x
-	context->SetWorldMatrix(anim);
+	// The culling camera works in native (file) coordinates, which is also what the
+	// display list nodes hold; the x flip is part of the world->clip transform. Retail
+	// keeps the culling and the rendering camera apart; the viewer uses one for both.
+	Vector camPosition = camera.m_position;
+	camPosition.x = -camPosition.x;
+	renderer::Camera *cam = renderer::View_GetCullingCamera();
+	cam->SetPosition(camPosition);
+	cam->SetViewProjection(Multiply(flip, camera.m_viewMat), camera.m_projMat);
+	renderer::View_SetRenderingCamera(cam);
 
-//	if(composite)
-//		composite->Display(nil, nil);
-
-	for(u32 i = 0; i < renderables.size(); i++) {
-		context->PushDebugName(renderables[i]->GetName());
-		renderables[i]->Display();
-		context->PopDebugName();
-	}
-	renderer::Display_List::Inst->Display();
+	// retail: RenderFlowClient::OnFrame 0x465590
+	renderer::TimeInfo t;
+	t.dt = timeStep;
+	t.fadeDt = timeStep;
+	renderer::g_renderMgr->Update(&t);
+	renderer::DestroyPendingRenderables();
+	renderer::g_renderMgr->Render(&t);
 
 	context->End();
 	ExplorerDrawOverlay();

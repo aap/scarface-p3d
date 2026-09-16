@@ -20,7 +20,7 @@ WorldGeoRenderable::WorldGeoRenderable(void)
    poseIDs(nil),
    numPrimitives(0)
 {
-	typeMask = 8;
+	typeMask = TYPE_WORLDGEO;
 	otherPosition = Vector(0.0f, 0.0f, 0.0f);
 }
 
@@ -38,12 +38,31 @@ WorldGeoRenderable::SetNumPrimitives(i32 n)
 	numPrimitives = n;
 }
 
+// retail: 0x471570 --- the base, then every sub-primitive
 void
 WorldGeoRenderable::SetVisible(bool visible)
 {
 	Renderable::SetVisible(visible);
 	for(i32 i = 0; i < numPrimitives; i++)
 		primitives[i].SetVisible(visible);
+}
+
+// retail: 0x471510
+void
+WorldGeoRenderable::Hide(void)
+{
+	Renderable::Hide();
+	for(i32 i = 0; i < numPrimitives; i++)
+		primitives[i].RemoveFromList();
+}
+
+// retail: 0x4714e0 --- THE hook for "measure my distance from somewhere other than my
+// origin". The point comes from the package's 0x8800009 record and is horizontal only.
+bool
+WorldGeoRenderable::GetDistanceRefPos(Vector *p)
+{
+	*p = otherPosition;
+	return useOtherPosition;
 }
 
 
@@ -150,8 +169,11 @@ if(draw == nil) continue;
 	worldgeo->SetNumElements(1);
 	worldgeo->SetElement(composite, 0, false);
 
+	// retail: flags80 &= ~1 --- untextured / vertex-fade world geo (the low-LOD city
+	// and the skyline) is not distance tested at all, it is always drawn, early, and
+	// the real geometry covers it
 	if(flag1)
-		worldgeo->flag1 = false;
+		worldgeo->doDistanceTest = false;
 
 	*pObject = worldgeo;
 	*pUID = worldgeo->GetUID();

@@ -22,8 +22,10 @@
 
 #include "pddi.h"
 
+#include "renderer/view.h"
 #include "renderer/display_list.h"
 #include "renderer/renderable.h"
 #include "renderer/worldgeo.h"
 #include "renderer/zonepkg.h"
 #include "renderer/instance.h"
+#include "renderer/render_manager.h"

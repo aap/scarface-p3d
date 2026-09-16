@@ -309,6 +309,10 @@ public:
 
 	virtual void DrawPrimBuffer(pddiShader *mat, pddiPrimBuffer *buf);
 	virtual void SetZWrite(bool enable) { glDepthMask(enable ? GL_TRUE : GL_FALSE); }
+	virtual void SetColourWrite(bool r, bool g, bool b, bool a) {
+		glColorMask(r ? GL_TRUE : GL_FALSE, g ? GL_TRUE : GL_FALSE,
+		            b ? GL_TRUE : GL_FALSE, a ? GL_TRUE : GL_FALSE);
+	}
 };
 
 
