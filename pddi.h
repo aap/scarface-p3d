@@ -153,6 +153,13 @@ enum pddiShadeMode
 	PDDI_SHADE_GOURAUD
 };
 
+enum pddiLightType
+{
+	PDDI_LIGHT_POINT,
+	PDDI_LIGHT_DIRECTIONAL,
+	PDDI_LIGHT_SPOT
+};
+
 enum pddiPrimType
 {
 	PDDI_PRIM_TRIANGLES,
@@ -190,6 +197,37 @@ struct pddiColour
 	u8 G(void) { return (c>>8)&0xFF; }
 	u8 B(void) { return (c>>16)&0xFF; }
 	u8 A(void) { return (c>>24)&0xFF; }
+};
+
+// one hardware light slot. Retail builds one of these on the stack in
+// pure3d::PointLight::Update (0x006893a0) and hands it to pddiContext::SetLight.
+struct pddiLightDesc
+{
+	bool enabled;
+	pddiLightType type;
+	pddiColour colour;
+	Vector position;
+	Vector direction;
+	float attenuationA, attenuationB, attenuationC;
+	float phi, theta, falloff;
+	// not retail: the decay range of the pure3d::Light the slot came from. pddi has no
+	// such thing (retail's LightsChooser evaluates the decay on the CPU and turns the
+	// light into a plain directional light); the GL backend uses it as the falloff.
+	float innerRange, outerRange;
+
+	pddiLightDesc(bool e = false)
+	 : enabled(e), type(PDDI_LIGHT_DIRECTIONAL), colour(255, 255, 255),
+	   position(0.0f, 0.0f, 0.0f), direction(0.0f, 0.0f, 1.0f),
+	   attenuationA(1.0f), attenuationB(0.0f), attenuationC(0.0f),
+	   phi(0.0f), theta(0.0f), falloff(0.0f), innerRange(0.0f), outerRange(0.0f) {}
+
+	void SetDirectionalLight(pddiColour c, const Vector &d) {
+		type = PDDI_LIGHT_DIRECTIONAL; colour = c; direction = d;
+	}
+	void SetPointLight(pddiColour c, const Vector &p, float inner, float outer) {
+		type = PDDI_LIGHT_POINT; colour = c; position = p;
+		innerRange = inner; outerRange = outer;
+	}
 };
 
 class pddiObject
@@ -312,6 +350,16 @@ public:
 	// retail: pddiRenderContext +0x118 SetZWrite (d3d 0x64b990), +0x100 SetColourWrite (0x64b8d0)
 	virtual void SetZWrite(bool enable) {}
 	virtual void SetColourWrite(bool r, bool g, bool b, bool a) {}
+
+	// lighting. retail: pddiRenderContext +0xa8 GetMaxLights, +0xac SetAmbientLight
+	// (d3d 0x64b850, which is just D3DRS_AMBIENT), +0xb0 GetAmbientLight,
+	// +0xb4 SetLight, +0xb8 EnableLight (re/notes/lighting.md §4)
+	virtual int GetMaxLights(void) { return 0; }
+	virtual void SetAmbientLight(pddiColour colour) {}
+	virtual pddiColour GetAmbientLight(void) { return pddiColour(0u); }
+	virtual void SetLight(int handle, const pddiLightDesc *desc) {}
+	virtual void EnableLight(int handle, bool enable) {}
+	virtual const pddiLightDesc *GetLight(int handle) { return nil; }
 };
 extern pddiContext *context;
 

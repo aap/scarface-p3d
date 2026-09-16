@@ -141,12 +141,22 @@ glState::glState(void)
 	u_matSpecular = uniformRegistry.Register("u_matSpecular", UNIFORM_VEC4);
 	u_matEmissive = uniformRegistry.Register("u_matEmissive", UNIFORM_VEC4);
 	u_ambientColour = uniformRegistry.Register("u_ambientColour", UNIFORM_VEC4);
-	u_lightDir1 = uniformRegistry.Register("u_lightDir1", UNIFORM_VEC4);
-	u_lightColour1 = uniformRegistry.Register("u_lightColour1", UNIFORM_VEC4);
+	u_lightColour = uniformRegistry.Register("u_lightColour", UNIFORM_VEC4, GL_MAX_LIGHTS);
+	u_lightDir = uniformRegistry.Register("u_lightDir", UNIFORM_VEC4, GL_MAX_LIGHTS);
+	u_lightPos = uniformRegistry.Register("u_lightPos", UNIFORM_VEC4, GL_MAX_LIGHTS);
+	u_lightRange = uniformRegistry.Register("u_lightRange", UNIFORM_VEC4, GL_MAX_LIGHTS);
 	u_debug = uniformRegistry.Register("u_debug", UNIFORM_VEC4);
 	u_vertexFade = uniformRegistry.Register("u_vertexFade", UNIFORM_VEC4);
 	vertexFade = Vector4(0.0f, 0.0f, 0.0f, 0.0f);
 	whiteTex = 0;
+
+	// Until renderer::LightManager applies the game's own lights this is what the world
+	// is lit with: aap's eyeballed stand-in for the retail noon sun, which turned out to
+	// be very close to the LITE_Miami* animations at frame 120 (ambient 63,52,31 and
+	// sun 99,97,72 from (-0.473,-0.743,0.473)).
+	ambientColour = pddiColour(51, 43, 27);
+	lights[0].SetDirectionalLight(pddiColour(97, 95, 70), Vector(0.5f, -0.5f, 0.5f));
+	lights[0].enabled = true;
 }
 
 void
@@ -158,9 +168,20 @@ glState::Flush(void)
 	uniformRegistry.SetUniform(u_proj, &context->GetProjectionMatrix());
 	col = convCol(ambientColour);
 	uniformRegistry.SetUniform(u_ambientColour, &col);
-	uniformRegistry.SetUniform(u_lightDir1, &lightDir1);
-	col = convCol(lightColour1);
-	uniformRegistry.SetUniform(u_lightColour1, &col);
+	Vector4 lcol[GL_MAX_LIGHTS], ldir[GL_MAX_LIGHTS], lpos[GL_MAX_LIGHTS], lrange[GL_MAX_LIGHTS];
+	for(int i = 0; i < GL_MAX_LIGHTS; i++) {
+		pddiLightDesc *l = &lights[i];
+		Vector4 c = convCol(l->colour);
+		lcol[i] = Vector4(c.x, c.y, c.z, l->enabled ? 1.0f : 0.0f);
+		ldir[i] = Vector4(l->direction.x, l->direction.y, l->direction.z,
+		                  l->type == PDDI_LIGHT_POINT ? 1.0f : 0.0f);
+		lpos[i] = Vector4(l->position.x, l->position.y, l->position.z, 0.0f);
+		lrange[i] = Vector4(l->innerRange, l->outerRange, 0.0f, 0.0f);
+	}
+	uniformRegistry.SetUniform(u_lightColour, lcol);
+	uniformRegistry.SetUniform(u_lightDir, ldir);
+	uniformRegistry.SetUniform(u_lightPos, lpos);
+	uniformRegistry.SetUniform(u_lightRange, lrange);
 	Vector4 dbg(pddiDebug.noLighting ? 1.0f : 0.0f, pddiDebug.noVertexColours ? 1.0f : 0.0f, pddiDebug.noTextures ? 1.0f : 0.0f, 0.0f);
 	uniformRegistry.SetUniform(u_debug, &dbg);
 	uniformRegistry.SetUniform(u_vertexFade, &vertexFade);

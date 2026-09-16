@@ -110,12 +110,8 @@ glShader::SetPass(i32 pass)
 		discardProgram->Bind();
 		return;
 	}
-	// TODO: this is shit
-	{
-		state->SetAmbientColour(pddiColour(51, 43, 27));
-		state->SetLightColour(pddiColour(97, 95, 70));
-		state->SetLightDir(Vector(0.5, -0.5, 0.5));
-	}
+	// the lights are context state now: renderer::LightManager fills the pddi slots once
+	// a frame out of the game's own pure3d::LightGroups (renderer/lighting.cpp)
 	simpleProgram->Bind();
 	state->SetTexture(baseTex);
 	state->SetMaterial(isLit, twoSided, colours);

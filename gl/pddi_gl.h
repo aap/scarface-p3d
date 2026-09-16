@@ -257,6 +257,11 @@ public:
 
 
 
+// the number of pddi light slots the shader can consume; keep in sync with MAXLIGHTS in
+// gl/shaders/shader.vert. Retail's d3d context has 8 and pure3d::LightsChooser reduces
+// the world lights to 4 per lit object.
+enum { GL_MAX_LIGHTS = 4 };
+
 class glState
 {
 	i32 u_world;
@@ -268,16 +273,17 @@ class glState
 	i32 u_matSpecular;
 	i32 u_matEmissive;
 	i32 u_ambientColour;
-	i32 u_lightDir1;
-	i32 u_lightColour1;
+	i32 u_lightColour;
+	i32 u_lightDir;
+	i32 u_lightPos;
+	i32 u_lightRange;
 	i32 u_debug;
 	i32 u_vertexFade;
 	Vector4 vertexFade;		// x: fade start, y: fade end (m from the camera), z: enable
 	u32 whiteTex;			// bound when a shader has no texture
 
 	pddiColour ambientColour;
-	Vector lightDir1;
-	pddiColour lightColour1;
+	pddiLightDesc lights[GL_MAX_LIGHTS];
 public:
 	glState(void);
 	void Flush(void);
@@ -289,8 +295,10 @@ public:
 	void SetVertexFade(float start, float end, bool enable) { vertexFade = Vector4(start, end, enable ? 1.0f : 0.0f, 0.0f); }
 
 	void SetAmbientColour(pddiColour col) { ambientColour = col; }
-	void SetLightDir(const Vector &dir) { lightDir1 = dir; }
-	void SetLightColour(pddiColour col) { lightColour1 = col; }
+	pddiColour GetAmbientColour(void) { return ambientColour; }
+	void SetLight(int i, const pddiLightDesc *desc) { if(i >= 0 && i < GL_MAX_LIGHTS) lights[i] = *desc; }
+	void EnableLight(int i, bool on) { if(i >= 0 && i < GL_MAX_LIGHTS) lights[i].enabled = on; }
+	const pddiLightDesc *GetLight(int i) { return i >= 0 && i < GL_MAX_LIGHTS ? &lights[i] : nil; }
 };
 extern glState *state;
 
@@ -303,6 +311,13 @@ class glContext : public pddiContext
 	Matrix projMatrix;
 public:
 	glContext(void);
+
+	virtual int GetMaxLights(void) { return GL_MAX_LIGHTS; }
+	virtual void SetAmbientLight(pddiColour colour) { state->SetAmbientColour(colour); }
+	virtual pddiColour GetAmbientLight(void) { return state->GetAmbientColour(); }
+	virtual void SetLight(int handle, const pddiLightDesc *desc) { state->SetLight(handle, desc); }
+	virtual void EnableLight(int handle, bool enable) { state->EnableLight(handle, enable); }
+	virtual const pddiLightDesc *GetLight(int handle) { return state->GetLight(handle); }
 
 	virtual void Begin(void);
 	virtual void End(void);
