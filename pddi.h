@@ -299,6 +299,7 @@ public:
 	virtual void PopDebugName(void) {}
 
 	virtual void DrawPrimBuffer(pddiShader *mat, pddiPrimBuffer *buf) = 0;
+	virtual void SetZWrite(bool enable) {}
 };
 extern pddiContext *context;
 

@@ -46,7 +46,9 @@ public:
 	void RenderList(i32 i);
 	void RemovePrimitive(DisplayListPrimitive *prim);
 
+	void SortListByDepth(i32 i);
 	static Display_List *Inst;
+	static Vector sortCamPosition;	// camera position in render space, for the depth sort
 };
 
 };

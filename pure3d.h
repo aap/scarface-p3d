@@ -25,3 +25,5 @@
 #include "renderer/display_list.h"
 #include "renderer/renderable.h"
 #include "renderer/worldgeo.h"
+#include "renderer/zonepkg.h"
+#include "renderer/instance.h"

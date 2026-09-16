@@ -2,6 +2,9 @@
 #include "renderable.h"
 #include "../shader.h"
 #include "../pddi.h"
+#include <algorithm>
+#include <vector>
+#include <stdlib.h>
 
 namespace renderer
 {
@@ -15,6 +18,41 @@ int nlists;
 using namespace pure3d;
 
 Display_List *Display_List::Inst;
+Vector Display_List::sortCamPosition;
+
+// Retail (0x45ad10) depth-sorts only the fading lists (51 54 65 66 70 71 83) by
+// view-space depth; the plain alpha-blended lists are drawn unsorted with depth
+// writes on, punch-through and all. We sort those too (far to near), which is
+// what the old SHR tDisplayList did. P3D_SORTBLEND=0 disables it.
+static const i32 depthSortedLists[] = { 51, 54, 65, 66, 70, 71, 83,
+	37, 38, 29, 23, 35, 36, 40, 41, 33, 34, 42, 45, 17, 19, 3, 5, 78, 79, 80, 81 };
+// retail Render() (0x45e680) wraps these in SetZWrite(false)
+static const i32 noZWriteLists[] = { 3, 17, 18, 4, 75, 5, 19, 20, 6, 11, 12 };
+
+static bool
+InList(const i32 *list, u32 n, i32 i)
+{
+	for(u32 j = 0; j < n; j++) if(list[j] == i) return true;
+	return false;
+}
+
+void
+Display_List::SortListByDepth(i32 i)
+{
+	std::vector<std::pair<float, DisplayListDrawable*>> nodes;
+	for(ListLink<DisplayListDrawable> *link = renderLists[i].anchor.next; link; link = link->next) {
+		DisplayListDrawable *draw = (DisplayListDrawable*)link;
+		Vector c = Multiply(draw->primEntry->prim->sphere.centre, draw->matrix);
+		nodes.push_back(std::make_pair(NormSq(c - sortCamPosition), draw));
+	}
+	if(nodes.size() < 2)
+		return;
+	std::sort(nodes.begin(), nodes.end(), [](const std::pair<float, DisplayListDrawable*> &a, const std::pair<float, DisplayListDrawable*> &b) { return a.first < b.first; });
+	// Insert pushes at the front, so inserting near-to-far leaves the list far-to-near
+	renderLists[i].Init();
+	for(u32 j = 0; j < nodes.size(); j++)
+		renderLists[i].Insert(&nodes[j].second->link);
+}
 
 Display_List::Display_List(i32 size)
  : DisplayList(1, 1)
@@ -58,6 +96,8 @@ Display_List::AddContainerElement(DrawableContainer *container, i32 idx, Matrix 
 	}
 	DisplayListDrawable *draw = (DisplayListDrawable*)link;
 
+	if(matrix == nil && info && ((DisplayListPrimitive*)info)->GetInstanceMatrix())
+		matrix = (Matrix*)((DisplayListPrimitive*)info)->GetInstanceMatrix();
 	if(matrix)
 		draw->matrix = Multiply(*matrix, context->GetWorldMatrix());
 	else
@@ -539,6 +579,11 @@ Display_List::RenderList(i32 i)
 {
 	// TODO: this is all wrong
 listorder[nlists++] = i;
+	static bool sortBlend = !(getenv("P3D_SORTBLEND") && atoi(getenv("P3D_SORTBLEND")) == 0);
+	if(sortBlend && InList(depthSortedLists, nelem(depthSortedLists), i))
+		SortListByDepth(i);
+	bool zwrite = !InList(noZWriteLists, nelem(noZWriteLists), i);
+	if(!zwrite) context->SetZWrite(false);
 displistsize[i] = 0;
 	for(ListLink<DisplayListDrawable> *link = renderLists[i].anchor.next;
 	    link;
@@ -551,6 +596,7 @@ continue;
 		context->SetWorldMatrix(draw->matrix);
 		draw->primEntry->prim->Display();
 	}
+	if(!zwrite) context->SetZWrite(true);
 }
 
 void

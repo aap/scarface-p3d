@@ -308,6 +308,7 @@ public:
 	virtual void PopDebugName(void);
 
 	virtual void DrawPrimBuffer(pddiShader *mat, pddiPrimBuffer *buf);
+	virtual void SetZWrite(bool enable) { glDepthMask(enable ? GL_TRUE : GL_FALSE); }
 };
 
 

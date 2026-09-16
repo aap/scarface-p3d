@@ -11,6 +11,8 @@ using namespace pure3d;
 class Renderable;
 struct DisplayListDrawable;
 
+void SetPrimLayerByShader(DrawablePrimitive *prim, bool &flag1);
+
 // This used by Renderable, it also knows about Display_List
 //  because the children are stored there.
 // the drawable comes from a CompositeDrawable
@@ -18,6 +20,7 @@ class DisplayListPrimitive : public GameDrawableInfo
 {
 	Renderable *parent;
 	DrawableHierarchy *drawable;
+	const Matrix *instanceMatrix;	// per-instance transform (eco props), nil = none
 	LinkedList<DisplayListDrawable> children;
 	bool isVisible : 1;
 	bool isInList : 1;
@@ -28,6 +31,8 @@ public:
 	void SetParent(Renderable *renderable) { parent = renderable; }
 	void SetDrawable(DrawableHierarchy *drawable, bool flag4);
 	DrawableHierarchy *GetDrawable(void) { return drawable; }
+	void SetInstanceMatrix(const Matrix *m) { instanceMatrix = m; }
+	const Matrix *GetInstanceMatrix(void) { return instanceMatrix; }
 	void SetVisible(bool visible);
 	void Display(bool visible);
 
@@ -58,6 +63,7 @@ public:
 
 	// TODO: lots more
 	Matrix matrix;
+	i32 typeMask;	// +0x54 in retail: WorldGeo 8, StateProp 0x10, ZonePkg 0x8000, ...
 	Array<DisplayListElement> elements;
 	bool flag1 : 1;
 	bool doDistFade : 1;
@@ -73,6 +79,7 @@ public:
 
 	void SetNumElements(i32 n);
 	void SetElement(DrawableHierarchy *drawable, i32 i, bool flag4);
+	void SetElementDrawDist(i32 i, float min, float max, float fade);
 
 	//
 	//

@@ -20,7 +20,7 @@ WorldGeoRenderable::WorldGeoRenderable(void)
    poseIDs(nil),
    numPrimitives(0)
 {
-	// TODO: unknown -> 8
+	typeMask = 8;
 	otherPosition = Vector(0.0f, 0.0f, 0.0f);
 }
 
@@ -124,85 +124,7 @@ WorldGeoLoader::LoadObject(IRefCount **pObject, u32 *pUID, content::ChunkFile *f
 if(draw == nil) continue;
 			for(i32 j = 0; j < draw->GetNumElements(); j++) {
 				DrawablePrimitive *prim = draw->GetElement(j)->prim;
-				Shader *shader = prim->GetShader();
-				u32 type = prim->GetSomeMask();
-				if(type == 2 || type == 4 || type == 8) {
-					prim->SetLayer(1);
-				} else switch(shader->GetType()) {
-				case Shader::SHADER_UNTEXTURED:
-				case Shader::SHADER_VERTEXFADE:
-					prim->SetLayer(33);
-					flag1 = true;
-					break;
-				case Shader::SHADER_SPECULAR:
-					prim->SetLayer(5);
-					break;
-				case Shader::SHADER_SPECULAR_MCBV:
-					prim->SetLayer(6);
-					break;
-				case Shader::SHADER_FOAM:
-					prim->SetLayer(29);
-					break;
-				case Shader::SHADER_NIGHTLIGHT:
-					prim->SetLayer(3);
-					break;
-				case Shader::SHADER_SHADOWDECAL:
-					prim->SetLayer(37);
-					break;
-				case Shader::SHADER_DECAL:
-					switch(shader->GetBlendMode()) {
-					case PDDI_BLEND_ADD:
-					case PDDI_BLEND_SUBTRACT:
-						prim->SetLayer(21);
-						break;
-					default:
-						prim->SetLayer(22);
-						break;
-					}
-					break;
-				case Shader::SHADER_ENV:
-					prim->SetLayer(26);
-					break;
-				case Shader::SHADER_SIMPLE:
-					if(shader->GetIsLit()) {
-						if(shader->GetAlphaTest() && shader->GetBlendMode() == PDDI_BLEND_NONE) {
-							prim->SetLayer(13);
-						} else if(!shader->IsXXXBlendMode()) {
-							prim->SetLayer(11);
-						} else if(shader->IsBlendAddSub()) {
-							prim->SetLayer(14);
-						} else {
-							prim->SetLayer(12);
-						}
-					} else {
-						if(!shader->IsXXXBlendMode()) {
-							prim->SetLayer(7);
-						} else if(shader->IsBlendAddSub()) {
-							prim->SetLayer(10);
-						} else {
-							prim->SetLayer(8);
-						}
-					}
-					break;
-				case Shader::SHADER_CBVLIT:
-					if(shader->GetAlphaTest() && shader->GetBlendMode() == PDDI_BLEND_NONE) {
-						prim->SetLayer(17);
-					} else if(!shader->IsXXXBlendMode()) {
-						prim->SetLayer(15);
-					} else if(shader->IsBlendAddSub()) {
-						prim->SetLayer(18);
-					} else {
-						prim->SetLayer(16);
-					}
-					break;
-				case Shader::SHADER_LAYERED:
-					if(shader->GetIsLit())
-						prim->SetLayer(20);
-					else
-						prim->SetLayer(19);
-					break;
-				default: break;
-				}
+				SetPrimLayerByShader(prim, flag1);
 			}
 		}
 	}

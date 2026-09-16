@@ -1,3 +1,5 @@
+#include <stdlib.h>
+#include <string.h>
 #include "loadmanager.h"
 #include "geometry.h"
 #include "shader.h"
@@ -159,7 +161,7 @@ PrimGroupLoader::LoadOptimized(PrimEntry *entry, ChunkFile *f, LoadInventory *in
 			break;
 
 		case Geometry::NORMALLIST:
-			if(mVertexFormat & PDDI_V_POSITION) {
+			if(mVertexFormat & PDDI_V_NORMAL) {
 				u32 n = f->GetI32();
 				assert(n == mVertexCount);
 				stream = buf->Lock();
