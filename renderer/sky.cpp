@@ -1,10 +1,12 @@
 #include "sky.h"
 #include "render_manager.h"
+#include "lighting.h"
 #include "../billboard.h"
 #include "../shader.h"
 #include "../geometry.h"
 #include "../pddi.h"
 
+#include <math.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,15 +19,19 @@ using namespace pure3d;
 
 // retail: g[0x007c0c60]
 bool g_skyEnabled = true;
-// retail: g[0x008114ec] / 86400000
-float g_timeOfDay = 0.25f;
 
-static struct TimeOfDayInit {
-	TimeOfDayInit(void) {
-		if(const char *e = getenv("P3D_TIMEOFDAY"))
-			g_timeOfDay = (float)atof(e);
-	}
-} timeOfDayInit;
+// retail: g[0x008114ec] is the time of day in milliseconds and SkyRenderable::Update
+// turns it into a 0..1 phase with g[0x737b00] == 1/86400000. There is exactly one clock
+// in the game and the lights run off it too, so the viewer keeps it in one place:
+// renderer::LightManager::timeOfDay, in hours (P3D_TIME; P3D_TIMEOFDAY is the same clock
+// as a 0..1 fraction). gLightManager exists from RenderManager::Init onwards.
+float GetTimeOfDay(void)
+{
+	if(gLightManager == nil)
+		return 0.5f;
+	float t = gLightManager->timeOfDay/24.0f;
+	return t - floorf(t);
+}
 
 SkyRenderable::SkyRenderable(void)
  : Renderable(0),
@@ -76,9 +82,11 @@ SkyRenderable::Display(void)
 //	}
 //	Hide();                                        // force the nodes to be re-submitted
 //
-// We have no frame controllers (the 0x00121204/0x00121201 BillboardQuadGroupAnimation-
-// Controller chunks are skipped by both the composite and the billboard loader), and no
-// time-of-day manager, so only the throttle is here; see re/notes/sky.md.
+// The frame controllers of the sky composite are (re/notes/sky.md §4):
+//   PTRN_sky          the pose animation: it turns the "sun_grp" joint, and with it the
+//                     sun, the two flare rigs, the two lens flares and the moon
+//   BQG_*             one per billboard quad group: colour, size and visibility
+//   VRTX_*            one per sky box mesh: which vertex colour offset set is current
 void
 SkyRenderable::Update(TimeInfo *t)
 {
@@ -96,22 +104,16 @@ SkyRenderable::Update(TimeInfo *t)
 		return;
 	if(composite == nil)
 		return;
-	// retail: fc->SetFrame((float)(int)fc->GetNumFrames() * phase) for every frame
-	// controller of the composite. The only one we can drive is the vertex colour
-	// animation of the sky box meshes, which is the one that matters: it is what turns
-	// the sky from night to day. The billboard groups' own
-	// BillboardQuadGroupAnimationController (chunk 0x00121204/0x00121201) is not
-	// loaded, so the sun and the stars keep their rest colour.
-	i32 n = composite->GetPrimitiveList()->GetNumPrimitives();
-	for(i32 i = 0; i < n; i++) {
-		DrawableContainer *draw = composite->GetPrimitiveList()->GetPrimitive(i)->GetDrawable();
-		Geometry *geo = dynamic_cast<Geometry*>(draw);
-		if(geo == nil)
-			continue;
-		i32 frames = geo->GetNumColourAnimFrames();
-		if(frames > 0)
-			geo->SetColourAnimFrame((float)frames * g_timeOfDay);
-	}
+
+	float phase = GetTimeOfDay();
+	std::vector<FrameController*> &fcs = composite->GetFrameControllers();
+	for(u32 i = 0; i < fcs.size(); i++)
+		fcs[i]->SetFrame(fcs[i]->GetNumFrames() * phase);
+
+	// The pose animation moves the billboard groups, and a display list node caches the
+	// world matrix it was submitted with, so the nodes have to go: retail's Update ends
+	// with exactly this call (renderer/README.md, "The frame").
+	Hide();
 }
 
 

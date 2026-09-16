@@ -103,10 +103,22 @@ Implemented in the repo from these notes (2026-09-15, renderer:: restructured 20
   - renderer/sky.*: 0x08800002 SkyLoader -> SkyRenderable (notes/sky.md). Layers 28 (billboard
     quad groups -> list 76) / 38 / 39, a 2x scale, no distance test; Display_List::RenderSky and
     RenderCameraLocked76 translate their lists to the rendering camera like retail. billboard.*:
-    the 0x00017005/6/7/9 BillboardQuad(Group)/BillboardObject loader and a camera-facing quad
-    stream through pddi. The sky boxes' vertex colours are the NIGHT sky; the daylight comes from
-    the "VRTXANIM" vertex colour offsets (0x00121305/6 + 0x00010F02), which SkyRenderable::Update
-    drives from renderer::g_timeOfDay (P3D_TIMEOFDAY, 0..1, default 0.25).
+    the 0x00017005/6/7/9/a/b/c/d BillboardQuad(Group)/BillboardObject loader, a camera-facing
+    quad stream through pddi, and the cut-off cones (BillboardQuad::Calculate, retail 0x696f80 +
+    0x695a90) that fade a lens flare as it leaves the middle of the screen.
+  - anim.* + the frame controllers: the generic pure3d::Animation (0x00121000, all nine channel
+    types) and 0x00121201, with one controller per type: LITE (light.*), BQG (billboard.*),
+    VRTX (geometry.*) and PTRN (anim.*, the composite's pose). SkyRenderable::Update plays every
+    frame controller of the sky composite at numFrames*phase and then Hide()s, as retail does:
+    PTRN_sky turns the "sun_grp" joint, which is what carries the sun, its flares and the moon
+    across the sky (its rest pose is 755 m UNDERGROUND), BQG_sunShape colours the sun over the
+    day, BQG_p3dBillboardQuadGroupShape3 hides the moon between 07:00 and 19:55, and the VRTX_*
+    ones pick the sky box colour set through an INT channel of morph frame indices (NOT linearly
+    in the phase). One clock for the lot: renderer::LightManager::timeOfDay (P3D_TIME in hours,
+    P3D_TIMEOFDAY as a 0..1 fraction), so sky, sun and lights move together.
+  - geometry.cpp/billboard.cpp read the 0x00122000 container sort key (retail 0x69ca7a, clamped
+    to [0,1]). List 46 is sorted by it, so the horizon gradient and the two cloud layers are
+    painted over the dome instead of under it; without it the sky is one flat colour.
   - primgroup.cpp: NORMALLIST was gated on PDDI_V_POSITION instead of PDDI_V_NORMAL (latent nil deref).
     Prim groups with no index list are drawn with glDrawArrays (the sky boxes are bare triangle
     strips), vertex-animated groups load their rest pose instead of being skipped, and an unlit

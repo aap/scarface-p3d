@@ -3,8 +3,10 @@
 #include "loadmanager.h"
 #include "drawable.h"
 #include "skeleton.h"
+#include "anim.h"
 
 #include <assert.h>
+#include <vector>
 
 namespace pure3d
 {
@@ -65,6 +67,11 @@ private:
 	// 1 elements
 	// poseAnimationController
 	// compDrawVisibilityAnimationController
+	// retail: the composite's frame controller list (+0x48), which is what
+	// renderer::SkyRenderable::Update walks. It holds the composite's own 'PTRN'
+	// controller plus the 'BQG' and 'VRTX' ones of its elements, so that the sky can
+	// drive the lot from the time of day with one loop.
+	std::vector<FrameController*> frameControllers;
 public:
 	enum {
 		COMPOSITE_DRAWABLE = 0x123000,
@@ -84,6 +91,9 @@ public:
 		primList = list;
 	}
 	ActivePrimitiveList *GetPrimitiveList(void) { return primList; }
+	// retail: CompositeDrawable +0x48
+	std::vector<FrameController*> &GetFrameControllers(void) { return frameControllers; }
+	void AddFrameController(FrameController *fc) { fc->AddRef(); frameControllers.push_back(fc); }
 	virtual void Display(DisplayList *list, GameDrawableInfo *info);
 	virtual void CalcBounds(void);
 	virtual void SetShaderCallback(ShaderCallback *cb);

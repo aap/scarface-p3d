@@ -71,6 +71,9 @@ InitApp(void)
 	// default), P3D_RAIN=1 switches to the zone_rainlights group, P3D_NOGAMELIGHTS=1
 	// keeps the old hardcoded light.
 	renderer::gLightManager->flipX = true;
+	// P3D_TIMEOFDAY is the sky's old 0..1 phase; it is the same clock, in days instead
+	// of hours (renderer/sky.cpp), so it is just another spelling of P3D_TIME.
+	if(const char *e = getenv("P3D_TIMEOFDAY")) renderer::gLightManager->timeOfDay = (float)atof(e)*24.0f;
 	if(const char *e = getenv("P3D_TIME")) renderer::gLightManager->timeOfDay = (float)atof(e);
 	if(const char *e = getenv("P3D_RAIN")) renderer::gLightManager->raining = atoi(e) != 0;
 	if(const char *e = getenv("P3D_NOGAMELIGHTS")) renderer::gLightManager->enabled = atoi(e) == 0;
@@ -88,8 +91,8 @@ InitApp(void)
 	content::loadManager->AddHandler(new pure3d::SkeletonLoader, pure3d::Skeleton::SKELETON);
 	content::loadManager->AddHandler(new pure3d::LightLoader, pure3d::Light::LIGHT);
 	content::loadManager->AddHandler(new pure3d::LightGroupLoader, pure3d::LightGroup::LIGHT_GROUP);
-	content::loadManager->AddHandler(new pure3d::LightAnimationLoader, pure3d::LightAnimation::ANIMATION);
-	content::loadManager->AddHandler(new pure3d::FrameControllerLoader, pure3d::LightAnimationController::FRAME_CONTROLLER);
+	content::loadManager->AddHandler(new pure3d::AnimationLoader, pure3d::Animation::ANIMATION);
+	content::loadManager->AddHandler(new pure3d::FrameControllerLoader, pure3d::Animation::FRAME_CONTROLLER);
 	content::loadManager->AddHandler(new pure3d::BillboardObjectLoader, pure3d::BillboardObjectLoader::BILLBOARD_QUAD_GROUP);
 
 	content::loadManager->AddHandler(new renderer::WorldGeoLoader, renderer::Renderable::WORLDGEO_LOADER);

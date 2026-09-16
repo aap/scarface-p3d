@@ -4,6 +4,7 @@
 #include "entity.h"
 #include "loadmanager.h"
 #include "pddi.h"
+#include "anim.h"
 
 #include <vector>
 
@@ -100,88 +101,36 @@ public:
 
 // The four LITE_Miami*Shape animations in miami_lod.p3d / islands_LOD.p3d are the
 // time-of-day curve: 241 frames at 30 fps = one 24 h day, one frame every six minutes.
-// Retail loads them with the generic pure3d::Animation loader (chunk 0x00121000) and
-// plays them through pure3d::LightAnimationController (chunk 0x00121201, frame
-// controller type 'LITE'); we only decode what a LITE animation can contain.
-class LightAnimation : public Entity
-{
-public:
-	enum {
-		ANIMATION	= 0x00121000,
-		GROUP		= 0x00121001,
-		GROUP_LIST	= 0x00121002,
-		SIZE		= 0x00121004,
-		VECTOR_3DOF	= 0x00121104,
-		BOOL		= 0x00121108,
-		COLOUR		= 0x00121109,
-		INTERPOLATION_MODE = 0x00121110
-	};
-	// animation type and channel parameter four-CCs (SHR: Pure3DAnimationTypes /
-	// Pure3DAnimationChannels::Light). SHR pads the three-letter ones with a space;
-	// Scarface's exporter pads them with a NUL.                              [V]
-	enum {
-		TYPE_LITE	= FOURCC("LITE"),
-		CHANNEL_COLOUR	= FOURCC("CLR"),	// 'CLR\0'
-		CHANNEL_DIR	= FOURCC("DIR"),	// 'DIR\0'
-		CHANNEL_PARAM	= FOURCC("PARM"),
-		CHANNEL_ENABLE	= FOURCC("EABL")
-	};
-
-	struct ColourKey { float frame; pddiColour colour; };
-	struct VectorKey { float frame; Vector v; };
-
-	float numFrames;
-	float speed;			// frames per second
-	bool cyclic;
-	std::vector<ColourKey> colourKeys;
-	std::vector<VectorKey> dirKeys;
-
-	CLASSNAME(LightAnimation);
-	LightAnimation(void) : numFrames(0.0f), speed(30.0f), cyclic(false) {}
-
-	bool GetColour(float frame, pddiColour *out) const;
-	bool GetDirection(float frame, Vector *out) const;
-};
-
-class LightAnimationLoader : public SimpleChunkHandler
-{
-public:
-	CLASSNAME(LightAnimationLoader)
-	LightAnimationLoader(void) : SimpleChunkHandler(LightAnimation::ANIMATION) {}
-	// z04 has 1499 animations of every type; this builds an object only for 'LITE'
-	virtual void LoadObject(IRefCount **pObject, u32 *pUID, ChunkFile *f, LoadInventory *inventory);
-};
-
+// Retail loads them with the generic pure3d::Animation loader (chunk 0x00121000, anim.h)
+// and plays them through pure3d::LightAnimationController (chunk 0x00121201, frame
+// controller type 'LITE').
+//
 // retail: pure3d::LightAnimationController (content::LoadInventory::DynamicCaster vtable
 // 0x00737ea4). Binds one LITE animation to one Light; SFLightGroupLoader looks these up
 // by name for the kind 0 and kind 1 groups.
-class LightAnimationController : public Entity
+class LightAnimationController : public FrameController
 {
 public:
-	// the Scarface frame-controller chunk. Retail's generic one is 0x00121200; 0x121201
-	// is the version-1 variant with an extra 'ANIM' tag word.
-	enum { FRAME_CONTROLLER = 0x00121201 };
-
 	Light *light;
-	LightAnimation *animation;
-	float frameOffset;
 
 	CLASSNAME(LightAnimationController);
-	LightAnimationController(void) : light(nil), animation(nil), frameOffset(0.0f) {}
+	LightAnimationController(void) : light(nil) {}
 	~LightAnimationController(void);
 
 	// retail/SHR: tLightAnimationController::UpdateNoBlending --- sample the colour and
 	// direction channels and write them into the light
-	void SetFrame(float frame);
-	float GetNumFrames(void) const { return animation ? animation->numFrames : 0.0f; }
+	virtual void SetFrame(float frame);
 };
 
+// The generic 0x00121201 handler: only the top-level, standalone frame controllers reach
+// it, and of those only the 'LITE' ones become an object. The nested ones (a 'BQG' inside
+// a billboard quad group, a 'PTRN' inside a composite drawable, a 'VRTX' inside a mesh)
+// are read by their parent loader, which is the only place that knows the target.
 class FrameControllerLoader : public SimpleChunkHandler
 {
 public:
 	CLASSNAME(FrameControllerLoader)
-	FrameControllerLoader(void) : SimpleChunkHandler(LightAnimationController::FRAME_CONTROLLER) {}
-	// only frame controllers of type 'LITE' become an object
+	FrameControllerLoader(void) : SimpleChunkHandler(Animation::FRAME_CONTROLLER) {}
 	virtual void LoadObject(IRefCount **pObject, u32 *pUID, ChunkFile *f, LoadInventory *inventory);
 };
 

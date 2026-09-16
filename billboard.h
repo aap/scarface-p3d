@@ -5,6 +5,7 @@
 #include "loadmanager.h"
 #include "array.h"
 #include "pddi.h"
+#include "anim.h"
 
 namespace pure3d
 {
@@ -32,6 +33,16 @@ public:
 		MODE_LOCAL_Y_AXIS = 5,	// "LYAX"
 	};
 
+	// the cut-off cone mode four-CCs of 0x0001700a / 0x0001700b, mapped at 0x00695a50
+	// (and inline at 0x006990d6 for the group's own pair). It is a bit MASK: bit 0 is
+	// the cone around the (z,y) plane, bit 1 the one around the (z,x) plane.   [V]
+	enum {
+		CUTOFF_NONE	= 0,	// anything that is not one of the three below
+		CUTOFF_VERT	= 1,	// "VERT"
+		CUTOFF_HRZT	= 2,	// "HRZT"
+		CUTOFF_BOTH	= 3	// "BOTH"
+	};
+
 	CLASSNAME(BillboardQuad)
 
 	pddiColour colour;	// +0x38
@@ -44,10 +55,23 @@ public:
 	u32 flipMode;		// +0x90, the uv flip flags of 0x00017009
 	Vector2 uv[4];		// +0x94, bottom left, bottom right, top right, top left
 	Vector2 uvOffset;	// +0xb4
-	u32 cutOffMode;		// +0xc4 (BillboardCutOffQuad only), 0x00017008/a/b
-	float intensity;	// the cut-off fade, always 1 without a cut-off mode
+
+	// --- BillboardCutOffQuad (0x108 bytes instead of 0xc4) ---
+	bool isCutOff;
+	u32 sourceMode;		// +0xc4, 0x0001700a: the cone in the QUAD's own frame
+	float sourceRange[4];	// +0xd0..+0xdc, the COSINES of (vertIn, vertOut, horzIn, horzOut)
+	u32 edgeMode;		// +0xc8, 0x0001700b: the cone in the CAMERA's frame
+	float edgeRange[4];	// +0xe0..+0xec, the same four cosines
+	u32 falloffType;	// +0xcc, 0x0001700c: "LINE" -> 1
+	float falloff[2];	// +0x100, +0x104
+	float cutOffScale[4];	// +0xf0..+0xfc, 0x0001700d: two (hi, lo) size-scale pairs
+	float intensity;	// the cut-off fade, 1 without a cut-off cone
 
 	BillboardQuad(void);
+
+	// retail: pure3d::BillboardCutOffQuad vslot 8, 0x00696f80 (the plain quad's slot is
+	// a nullsub). Sets `intensity` from the two cones; see billboard.cpp.
+	void Calculate(const Matrix &objectToWorld, const Matrix &cameraToWorld);
 };
 
 // retail: pure3d::BillboardQuadGroup : pure3d::DrawablePrimitive, vtable 0x0076afdc,
@@ -71,6 +95,10 @@ public:
 	BillboardQuadGroup(void);
 	~BillboardQuadGroup(void);
 
+	// SHR: tBillboardQuadGroup::FindQuadByUID --- how a BQG animation group finds the
+	// quad it animates
+	BillboardQuad *FindQuad(const char *name);
+
 	virtual u32 GetSomeMask(void) { return 1; }
 	virtual void Display(void);
 	virtual Shader *GetShader(void) const { return shader; }
@@ -91,9 +119,33 @@ public:
 	CLASSNAME(BillboardObject)
 
 	float intensityBias;	// +0x58, 1.0
+	// the 0x00121204 / 0x00121201 frame controllers of the group. Retail hangs them off
+	// the container's element (`e.frameControllers`); renderer::SkyLoader clears their
+	// "advance yourself" flag and SkyRenderable::Update drives them from the clock.
+	std::vector<FrameController*> frameControllers;
 
 	BillboardObject(void);
+	~BillboardObject(void);
 	virtual void Display(DisplayList *list, GameDrawableInfo *info);
+};
+
+// retail: pure3d::BillboardQuadGroupAnimationController (the RTTI DynamicCaster vtable is
+// 0x0076ac60); SHR: tBillboardQuadGroupAnimationController, p3d/anim/billboardobject-
+// animation.cpp. One 'BQG' animation group per quad, matched by name; the channels are
+// VIS / TRAN / ROT / WDT / HGT / DIST / CLR / OFF / ORNG / SRNG / ERNG (anim.h).
+class BillboardQuadGroupAnimationController : public FrameController
+{
+	BillboardQuadGroup *group;
+public:
+	CLASSNAME(BillboardQuadGroupAnimationController);
+	BillboardQuadGroupAnimationController(void) : group(nil) {}
+	~BillboardQuadGroupAnimationController(void);
+
+	void SetQuadGroup(BillboardQuadGroup *g);
+	BillboardQuadGroup *GetQuadGroup(void) { return group; }
+
+	// SHR: tBillboardQuadGroupAnimationController::Update
+	virtual void SetFrame(float frame);
 };
 
 // retail: pure3d::BillboardObjectLoader, vtable 0x0076afbc,
@@ -109,6 +161,7 @@ public:
 		BILLBOARD_UV_INFO	= 0x00017009,
 		BILLBOARD_CUTOFF_SOURCE	= 0x0001700A,
 		BILLBOARD_CUTOFF_EDGE	= 0x0001700B,
+		BILLBOARD_CUTOFF_FALLOFF = 0x0001700C,
 		BILLBOARD_CUTOFF_RANGE	= 0x0001700D,
 	};
 	CLASSNAME(BillboardObjectLoader)
