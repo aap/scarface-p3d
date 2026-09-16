@@ -14,6 +14,10 @@ struct DisplayListNode;
 
 void SetPrimLayerByShader(DrawablePrimitive *prim, bool &flag1);
 
+// P3D_VERBOSE: the per-renderable "explain your visibility decision" prints are
+// meant to be one dump, not a stream; nothing sets this yet
+extern bool debugPrinted;
+
 // retail: renderer::DisplayListPrimitive : GameDrawableInfo, vtable 0x00737704,
 // 0x20 bytes, ctor 0x458c60. One per (renderable, drawable) pair. It owns the nodes it
 // put into the Display_List (they are linked into `children` through Node::linkParent)

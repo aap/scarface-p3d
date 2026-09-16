@@ -76,6 +76,9 @@ public:
 	void SetPose(Pose *p) {
 		Assign(pose, p);
 	}
+	// retail: CompositeDrawable vslot 13; the pose's matrix table (+0x10) is what
+	// WorldGeoRenderable::Display walks with the poseIDs of its sub-primitives
+	Pose *GetPose(void) { return pose; }
 	void SetPrimitiveList(ActivePrimitiveList *list) {
 		assert(primList == nil);
 		primList = list;

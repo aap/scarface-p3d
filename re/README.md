@@ -88,13 +88,16 @@ Implemented in the repo from these notes (2026-09-15, renderer:: restructured 20
         Scene/GamePlayScene, Canvas (fog + UpdateFog), RenderableHandle (weak ref + uniqueId check).
       view.*  Camera (position + the six frustum planes) and the culling/rendering camera pair;
         p3dview drives the frame through RenderManager::Update -> DestroyPendingRenderables -> Render.
-    Two deliberate deviations, both marked in the code: node matrices are native and the viewer's x
-    flip is re-applied by the list walks (which is exactly the mechanism RenderReflection uses), and
-    Renderable::Display measures the draw distance to the element's bounding SPHERE, not to the
-    reference point --- retail gets away with the point because details_/shells_/skyline_/low_LOD_
-    world geo never reaches the base Display, it goes through WorldGeoRenderable::Display (0x471640),
-    which culls and fades the sub-primitives one by one. Using the point without that path culls half
-    the map.
+      worldgeo.*  WorldGeoRenderable::Display 0x471640 is implemented: details_/cbvlitdecals_/
+        skyline_/shells_/underwater_ geo does NOT use the base Display but culls and fades every
+        sub-drawable of its composite on its own, through primitives[]/poseIDs[] and the composite's
+        pose matrix table (notes/renderspine.md §4.5 has the reversed loop). Its band comes from
+        three globals keyed on the kind (details 120, shells 1500, skyline 3000 at the highest of
+        the three retail "DrawDistance" settings), not from the zone package.
+    One deliberate deviation is left, marked in the code: node matrices are native and the viewer's
+    x flip is re-applied by the list walks (which is exactly the mechanism RenderReflection uses).
+    The base Renderable::Display also still measures to the element's bounding SPHERE instead of the
+    reference point, which only matters for plain (unprefixed) world geo now.
     Debug envs: P3D_ONLYMODEL=<substr> (render only those instance models), P3D_HIDELIST=a,b,c (hide display
     lists), P3D_DEBUGMODEL=<modelname> (print placements).
   - primgroup.cpp: NORMALLIST was gated on PDDI_V_POSITION instead of PDDI_V_NORMAL (latent nil deref).

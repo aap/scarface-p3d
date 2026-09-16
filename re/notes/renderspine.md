@@ -592,7 +592,7 @@ occlusion volumes really are the shipped chunk data. Only a return of exactly **
 exists in the image outside of a debug/var table, so they are debug render switches:
 `0x7c0a10` = "draw plain world geo", `0x7c0a11` = "draw details / skyline / shells / low-LOD".
 
-### 4.5 `WorldGeoRenderable::Display` — 0x00471640 **[V for the dispatch, [?] for the inner loop]**
+### 4.5 `WorldGeoRenderable::Display` — 0x00471640 **[V]**
 
 ```c
 void WorldGeoRenderable::Display() {
@@ -601,24 +601,64 @@ void WorldGeoRenderable::Display() {
     if (!(f & 0x0e))       { g[0x7c0a10] ? Renderable::Display() : Hide(); return; }  // plain
     if (!g[0x7c0a11])      { Hide(); return; }
     // ---- custom path: details_ / cbvlitdecals_ / skyline_ / shells_ / underwater_ ----
-    Camera *cam = GetCurrentCamera();
-    DrawableContainer *comp = GetElementDrawable(0);
-    Matrix base = comp->vslot13()->+0x10;              // the composite's pose matrix table, base
-    Sphere s = comp->+0x28;
-    cam->GetPosition(&camPos);
-    bool coarseVisible = cam->SphereVisible(&s.centre, s.r);
-    float fade = this->UpdateFade(0.33f);              // fixed dt, const 0x3ea8f5c3
-    matrixStack->Push(0); matrixStack->SetMatrix(0, &base);
+    Camera *cam = GetCurrentCamera();                  // 0x461ad0, the CULLING camera
+    DrawableContainer *comp = GetElementDrawable(0);   // 0x473fc0, the CompositeDrawable
+    Matrix base = comp->vslot13()->+0x10 [0];          // pose matrix table, entry 0 (64 bytes copied)
+    Sphere s = comp->+0x28;                            // the whole composite's sphere
+    cam->GetPosition(&camPos);                         // vslot 24
+    bool coarseVisible = cam->SphereVisible(&s.centre, s.r);     // vslot 22
+    float gfade = this->UpdateFade(0.33f);             // 0x473d90, fixed dt, const 0x3ea8f5c3
+                                                       // (Tick already stepped the fade this frame)
+    matrixStack->Push(0);                              // vslot 17
+    matrixStack->LoadMatrix(0, &base);                 // vslot 19 --- NOT this->matrix
+
     for (int i = 0; i < numPrimitives /*+0x9c*/; i++) {
-        Drawable *d   = primitives[i].GetDrawable();   // +0x94, 0x20 stride
-        u16 poseID    = poseIDs[i];                    // +0x98
-        Matrix *pose  = &comp->vslot13()->+0x10 [poseID];   // 0x40 stride  (shl esi,6)
-        matrixStack->vslot25(0, pose);                 // concat this sub-drawable's pose
+        Drawable *d   = primitives[i].GetDrawable();   // +0x94, stride 0x20
+        u32 poseID    = poseIDs[i];                    // +0x98, read as a dword
+        Matrix *pose  = &comp->vslot13()->+0x10 [poseID];        // stride 0x40 (shl esi,6)
+        matrixStack->PushMultiply(0, pose);            // vslot 25 --- pushes, popped below
+
+        bool visible = false;
         if (coarseVisible) {
-            // per-primitive: transform the sub-drawable's own sphere, distance, cull, fade,
-            // then primitives[i].SetVisible(true/false)
-            ...
+            // --- the sub-drawable's OWN sphere, through its OWN pose matrix ---
+            Vector c = MulPoint(pose, &d->+0x28);      // 0x6610f0 twice: v*pose, then *base
+            c        = MulPoint(&base, &c);
+            float r  = d->+0x34;
+            float scale = cam->+0x10;                  // draw distance scale
+            if (scale > 1.0f) scale = 1.0f;
+            float dist = (Length(c - camPos) - r) * scale;    // to the sphere SURFACE, NOT clamped at 0
+
+            // --- the band: NOT the element's drawDistMin/Max/Fade, three globals
+            //     rewritten here from the "DrawDistance" video setting ---
+            switch (renderContext->+0x540) {           // 0 / 1 / 2, set by 0x458760 from
+            case 0:  g[0x7c0a48]=60;  g[0x7c0a44]=150;  g[0x7c0a40]=300;  break;   // the "DrawDistance"
+            case 1:  g[0x7c0a48]=120; g[0x7c0a44]=800;  g[0x7c0a40]=1500; break;   // config string
+            case 2:  g[0x7c0a48]=120; g[0x7c0a44]=1500; g[0x7c0a40]=3000; break;   // (.data = case 2)
+            }                                          // >=2 leaves them alone
+            float maxD, fadeBand;
+            if      (f & 8) { maxD = g[0x7c0a44]; fadeBand = 50.0f; }   // drawFirst: shells_/underwater_
+            else if (f & 4) { maxD = g[0x7c0a40]; fadeBand = 80.0f; }   // isSkyline: skyline_
+            else            { maxD = g[0x7c0a48]; fadeBand = 20.0f; }   // isDetails: details_/cbvlitdecals_
+            // NB: no near distance, no minD test, drawDistMin/Max/Fade of elements[0] unused
+
+            if (dist <= maxD && cam->SphereVisible(&c, r)) {   // no occluder test here either
+                visible = true;
+                float alpha = 0.0f;
+                float fadeOut = (dist - (maxD - fadeBand)) / fadeBand;
+                if (fadeOut >= 0.0f && fadeOut <= 1.0f) alpha = fadeOut;
+                if (gfade > alpha) alpha = gfade;      // MAX, where the base Display lerps
+                                                       // (alpha*(1-g) + g, 0x474501)
+                if (alpha > 0.0f) {
+                    if (!d->vslot19())                 // IsFading: the DRAWABLE's own flag,
+                        { primitives[i].RemoveFromList(); d->vslot17(true); }   // there is no
+                    d->vslot18(alpha);                 // DisplayListElement here
+                } else if (d->vslot19()) {
+                    primitives[i].RemoveFromList(); d->vslot17(false); d->vslot18(0.0f);
+                }
+            }
         }
+        primitives[i].Display(visible);                // 0x458f00, edge triggered as always
+        matrixStack->Pop(0);                           // vslot 18
     }
     matrixStack->Pop(0);
 }
@@ -627,6 +667,25 @@ The point of the `primitives[]` / `poseIDs[]` arrays is exactly this: a `details
 one Renderable but every sub-drawable is distance-tested, culled and faded **individually**,
 using its own pose matrix out of the composite's matrix table. `SetVisible` (0x471570) forwards
 to all `numPrimitives` primitives.
+
+Five things that differ from the base `Renderable::Display` (§2.2) and are easy to get wrong:
+
+1. The **element-0 node is never submitted** on this path. `elements[0].prim` exists (the loader
+   calls `SetElement(composite,0)`) but only as the handle on the composite; the display list
+   only ever sees the sub-drawables.
+2. The distance is measured to the **sphere surface** (`|c - camPos| - r`) and is **not clamped
+   at 0**, while the base measures to the reference *point* (`GetDistanceRefPos`, else
+   `matrix.row3`) and does not subtract anything.
+3. The band is **not** the zone package's `drawDistMin/Max/Fade`; it is one of three globals
+   picked by the world-geo kind and rewritten from the DrawDistance video setting. There is no
+   near band, so a sub-primitive never fades *in*.
+4. The renderable-wide fade is combined with `max()`, not with the base's lerp.
+5. The "am I already fading" edge state is the **sub-drawable's** `IsFading()` (vslot 19), not a
+   `DisplayListElement::isFading` — there is no element per sub-primitive.
+
+`this->matrix` is not read at all: the world matrix under the nodes is `poseMatrix[0]` times the
+sub-drawable's `poseMatrix[poseID]`. For map geometry both the renderable matrix and the pose
+root are the identity, so nothing notices.
 
 ---
 

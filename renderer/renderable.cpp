@@ -6,10 +6,10 @@
 #include <stdlib.h>
 #include <math.h>
 
-static bool debugPrinted;
-
 namespace renderer
 {
+
+bool debugPrinted;
 
 using namespace pure3d;
 
@@ -417,10 +417,12 @@ Renderable::Display(void)
 		ref = wsph;
 	}
 	// not retail: retail measures to the reference POINT, which only works because the
-	// classes that have huge composites (details_/shells_/skyline_/low_LOD_ world geo)
-	// never reach this function --- WorldGeoRenderable::Display (0x471640) culls and
-	// fades their sub-primitives one by one instead. Until that path exists, measuring
-	// to the point culls half the map, so measure to the bounding sphere's surface.
+	// classes that have huge composites (details_/shells_/skyline_ world geo) never
+	// reach this function --- WorldGeoRenderable::Display (0x471640, worldgeo.cpp) culls
+	// and fades their sub-primitives one by one instead. What is left here is plain
+	// (unprefixed) world geo, whose matrix is the identity and which often has no
+	// otherPosition, so the point would be the world origin: measure to the bounding
+	// sphere's surface instead.
 	float dist = Norm(ref - camPos) - (distanceToRefPoint ? 0.0f : lsph.radius);
 	if(dist < 0.0f) dist = 0.0f;
 	float scale = cam->GetDrawDistanceScale();

@@ -63,6 +63,34 @@ at submit time**. Anything that invalidates it — the renderable moved (`isMatr
 its fade state flipped — has to call `DisplayListPrimitive::RemoveFromList()` to force a
 re-submit.
 
+## Two Display paths for world geo
+
+A `details_` / `cbvlitdecals_` / `skyline_` / `shells_` / `underwater_` composite is a whole
+city block or a whole island shell; one bounding sphere for the lot decides nothing useful.
+Retail therefore gives `WorldGeoRenderable` its own `Display` (0x471640, `worldgeo.cpp`) that
+skips the base entirely and walks `primitives[]` / `poseIDs[]` — one `DisplayListPrimitive`
+per sub-drawable of the composite, built by the loader. Each sub-drawable is transformed by
+its own pose matrix out of the composite's pose table, distance tested, frustum culled and
+faded **on its own**, and becomes its own display list node; element 0 (the composite) is
+never submitted on that path. `low_LOD_` and plain (unprefixed) world geo still go through
+`Renderable::Display`. The reversed loop is `re/notes/renderspine.md` §4.5; the differences
+from the base that matter are:
+
+* the distance is measured to the sub-sphere's **surface** and is not clamped at 0, where the
+  base measures to a reference *point*;
+* the near/far band is **not** the zone package's `drawDistMin/Max/Fade`. It is one of three
+  globals chosen by the kind — 120 m for details, 1500 m for shells, 3000 m for the skyline at
+  the highest of the three "DrawDistance" video settings (`SetWorldGeoDrawDistanceLevel`) —
+  with a fade band of 20 / 50 / 80 m and no near distance, so a sub-primitive never fades *in*;
+* the renderable-wide fade is combined with `max()`, not with the base's `alpha*(1-g) + g`;
+* the "am I already fading" edge state is the sub-drawable's own `IsFading()`, because there is
+  no `DisplayListElement` per sub-primitive.
+
+One deviation is left in the **base** `Renderable::Display`: it measures the draw distance to
+the element's bounding sphere surface instead of to the reference point. Retail's point works
+because the huge composites never reach the base; the plain world geo that does reach it in the
+viewer has an identity matrix and no `otherPosition`, so the point would be the world origin.
+
 ## The 84 lists
 
 The `layer` (0..44) baked into each `DrawablePrimitive` at load time is a *material class*
