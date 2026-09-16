@@ -9,6 +9,7 @@
 #include <math.h>
 #include <string.h>
 #include <string>
+#include <set>
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -35,6 +36,33 @@ float GetTimeOfDay(void)
 }
 
 bool g_skyFogHorizon = getenv("P3D_NOSKYFOG") == nil;
+bool g_skyLensFlares = getenv("P3D_FLARES") != nil && atoi(getenv("P3D_FLARES")) != 0;
+
+// what each billboard group on the sun's rig draws (measured by hiding them one at a
+// time): fxSys_SunFlareShape is the sun's glow disc itself and stays, sunShape is the
+// tiny core, p3dBillboardQuadGroupShape3 the moon; the ring (…Shape1), the ghosts
+// (…Shape2) and the streaks (fxSys_SunFlare1Shape) are the lens flare
+static bool
+IsLensFlare(const char *name)
+{
+	return strstr(name, "fxSys_SunFlare1Shape") != nil ||
+	       strstr(name, "p3dBillboardQuadGroupShape1") != nil ||
+	       strstr(name, "p3dBillboardQuadGroupShape2") != nil;
+}
+
+// elements hidden with P3D_SKYHIDE stay hidden whatever the flare switch says
+static std::set<std::string> envHidden;
+
+static void
+ApplyLensFlares(CompositeDrawable *composite)
+{
+	CompositeDrawable::ActivePrimitiveList *list = composite->GetPrimitiveList();
+	for(u32 i = 0; i < list->GetNumPrimitives(); i++) {
+		DrawableContainer *d = list->GetPrimitive(i)->GetDrawable();
+		if(d && IsLensFlare(d->GetName()) && envHidden.count(d->GetName()) == 0)
+			list->GetPrimitive(i)->isVisible = g_skyLensFlares;
+	}
+}
 
 // the elements of the composite that lie entirely below the horizon (y <= 0 in the sky
 // box's own space) are painted with the canvas fog colour, see g_skyFogHorizon
@@ -133,6 +161,7 @@ SkyRenderable::Update(TimeInfo *t)
 		fcs[i]->SetFrame(fcs[i]->GetNumFrames() * phase);
 	if(g_skyFogHorizon && !isRainy)
 		PaintLowerHemisphere(composite);
+	ApplyLensFlares(composite);
 
 	// The pose animation moves the billboard groups, and a display list node caches the
 	// world matrix it was submitted with, so the nodes have to go: retail's Update ends
@@ -193,8 +222,10 @@ SkyLoader::LoadObject(IRefCount **pObject, u32 *pUID, content::ChunkFile *f, con
 			std::string h(hide); size_t p = 0;
 			while(p < h.size()) {
 				size_t q = h.find(',', p); if(q == std::string::npos) q = h.size();
-				if(q > p && strstr(draw->GetName(), h.substr(p, q-p).c_str()))
+				if(q > p && strstr(draw->GetName(), h.substr(p, q-p).c_str())) {
 					composite->GetPrimitiveList()->GetPrimitive(i)->isVisible = 0;
+					envHidden.insert(draw->GetName());
+				}
 				p = q + 1;
 			}
 		}

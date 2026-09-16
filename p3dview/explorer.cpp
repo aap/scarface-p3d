@@ -20,6 +20,7 @@
 #include "../renderer/streamgraph.h"
 #include "camera.h"
 #include "../renderer/display_list.h"
+#include "../renderer/sky.h"
 
 using namespace core;
 using namespace pure3d;
@@ -681,6 +682,11 @@ ViewTab(void)
 		for(u32 i = 0; i < 17; i++)
 			ImGui::Checkbox(shaderRenderable[i].shader, &shaderRenderable[i].visible);
 		ImGui::TreePop();
+	}
+	if(ImGui::CollapsingHeader("Sky")) {
+		ImGui::Checkbox("draw the sky", &renderer::g_skyEnabled);
+		ImGui::Checkbox("lens flares (no occlusion yet: they shine through everything)", &renderer::g_skyLensFlares);
+		ImGui::Checkbox("below-horizon hemisphere takes the fog colour", &renderer::g_skyFogHorizon);
 	}
 	LightingGUI();
 	FogGUI();

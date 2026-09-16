@@ -17,6 +17,10 @@ extern bool g_skyEnabled;
 // of the sky box out to the far plane, so the horizon is the fog colour; until the viewer
 // draws the ocean this stand-in gives the same result. P3D_NOSKYFOG=1 turns it off.
 extern bool g_skyFogHorizon;
+// not retail: the lens flare rigs (fxSys_SunFlare*, the two flare stars) need the
+// occlusion query the sun's billboards use in retail, which the viewer lacks, so they
+// shine through walls and the ground. Off by default; View tab > Sky, or P3D_FLARES=1.
+extern bool g_skyLensFlares;
 
 // retail: g[0x008114ec], the time of day in milliseconds; SkyRenderable::Update turns it
 // into a 0..1 phase with g[0x737b00] == 1/86400000 and drives every frame controller of
