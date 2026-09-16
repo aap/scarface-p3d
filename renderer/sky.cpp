@@ -33,6 +33,27 @@ float GetTimeOfDay(void)
 	return t - floorf(t);
 }
 
+bool g_skyFogHorizon = getenv("P3D_NOSKYFOG") == nil;
+
+// the elements of the composite that lie entirely below the horizon (y <= 0 in the sky
+// box's own space) are painted with the canvas fog colour, see g_skyFogHorizon
+static void
+PaintLowerHemisphere(CompositeDrawable *composite)
+{
+	if(g_renderMgr == nil || g_renderMgr->canvas == nil || !g_renderMgr->canvas->fogEnabled)
+		return;
+	pddiColour fog(g_renderMgr->canvas->fogColour);
+	CompositeDrawable::ActivePrimitiveList *list = composite->GetPrimitiveList();
+	for(u32 i = 0; i < list->GetNumPrimitives(); i++) {
+		DrawableContainer *d = list->GetPrimitive(i)->GetDrawable();
+		if(d == nil || d->box.high.y > 0.0f)
+			continue;
+		for(i32 j = 0; j < d->GetNumElements(); j++)
+			if(PrimGroup *pg = dynamic_cast<PrimGroup*>(d->GetElement(j)->prim))
+				pg->SetVertexColour(fog);
+	}
+}
+
 SkyRenderable::SkyRenderable(void)
  : Renderable(0),
    composite(nil),
@@ -109,6 +130,8 @@ SkyRenderable::Update(TimeInfo *t)
 	std::vector<FrameController*> &fcs = composite->GetFrameControllers();
 	for(u32 i = 0; i < fcs.size(); i++)
 		fcs[i]->SetFrame(fcs[i]->GetNumFrames() * phase);
+	if(g_skyFogHorizon && !isRainy)
+		PaintLowerHemisphere(composite);
 
 	// The pose animation moves the billboard groups, and a display list node caches the
 	// world matrix it was submitted with, so the nodes have to go: retail's Update ends

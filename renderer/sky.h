@@ -12,6 +12,11 @@ using namespace content;
 // retail: g[0x007c0c60], a .data bool that starts out true. Both SkyRenderable::Display
 // and ::Update bail out on it, i.e. it is the global "draw the sky at all" switch.
 extern bool g_skyEnabled;
+// not retail: paint the sky box's below-horizon hemisphere (skybox16Shape, one dark blue
+// in the file) with the current fog colour. In the game the fogged ocean covers that part
+// of the sky box out to the far plane, so the horizon is the fog colour; until the viewer
+// draws the ocean this stand-in gives the same result. P3D_NOSKYFOG=1 turns it off.
+extern bool g_skyFogHorizon;
 
 // retail: g[0x008114ec], the time of day in milliseconds; SkyRenderable::Update turns it
 // into a 0..1 phase with g[0x737b00] == 1/86400000 and drives every frame controller of

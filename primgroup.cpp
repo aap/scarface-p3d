@@ -68,6 +68,19 @@ PrimGroup::SetVertexColourOffsets(const pddiColour *offsets, u32 n)
 }
 
 void
+PrimGroup::SetVertexColour(pddiColour colour)
+{
+	if(mPrimBuffer == nil || (mVertexFormat & PDDI_V_COLOUR) == 0)
+		return;
+	pddiPrimBufferStream *stream = mPrimBuffer->Lock();
+	for(u32 i = 0; i < mVertexCount; i++) {
+		stream->Colour(colour);
+		stream->Next();
+	}
+	mPrimBuffer->Unlock(stream);
+}
+
+void
 PrimGroup::SetShader(Shader *shader)
 {
 	Assign(mShader, shader);

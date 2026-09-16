@@ -51,6 +51,9 @@ public:
 	// and rewrite the vertex buffer's colour channel with base + offset
 	void SetBaseColours(const pddiColour *colours, u32 n);
 	void SetVertexColourOffsets(const pddiColour *offsets, u32 n);
+	// not retail: paint every vertex one colour (the sky's below-horizon hemisphere
+	// takes the fog colour until the ocean covers it, renderer/sky.cpp)
+	void SetVertexColour(pddiColour colour);
 };
 
 class PrimGroupStreamed : public PrimGroup
