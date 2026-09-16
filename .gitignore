@@ -6,3 +6,4 @@ build/
 p3dview/p3dview
 p3ddump/a.out
 core.[0-9]*
+p3dview/imgui.ini

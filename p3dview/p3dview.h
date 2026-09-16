@@ -54,4 +54,19 @@ void InitGL(void* loadproc);
 void InitScene(void);
 void RenderScene(void);
 void Screenshot(const char *path);
+
+struct LoadedFile {
+	const char *name;
+	content::LoadInventory *inv;
+};
+extern std::vector<LoadedFile> loadedFiles;
+extern std::vector<renderer::Renderable*> renderables;
+
+struct ShaderVis { bool visible; const char *shader; };
+extern ShaderVis shaderRenderable[17];
+
+// explorer.cpp
+void ExplorerGUI(void);
+void ExplorerPick(int mx, int my);
+void ExplorerDrawOverlay(void);
 void GUI(void);

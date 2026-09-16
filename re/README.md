@@ -64,6 +64,12 @@ Implemented in the repo from these notes (2026-09-15)
     Debug envs: P3D_ONLYMODEL=<substr> (render only those instance models), P3D_HIDELIST=a,b,c (hide display
     lists), P3D_DEBUGMODEL=<modelname> (print placements).
   - primgroup.cpp: NORMALLIST was gated on PDDI_V_POSITION instead of PDDI_V_NORMAL (latent nil deref).
+  - p3dview/explorer.cpp: imgui Explorer window — Files tab (every loaded inventory, objects grouped by class),
+    Renderables tab (visibility checkboxes), Selection tab (per-class details: world geo flags/draw distances,
+    zone package members, instance placements with jump, composite primitives, container elements with layer
+    and shader, shader state), View tab (camera, instance cull, display-list and shader toggles).
+    ctrl+click in the view picks the nearest object (ray vs bounding spheres), selection is outlined in red,
+    P3D_SELECT=<renderable name> selects at startup.
   - p3dview: P3D_SHOT=file.png [P3D_SHOTFRAME=n] screenshot-and-quit, P3D_CAMPOS/P3D_CAMTARGET="x y z",
     P3D_VERBOSE=1 prints per-world-geo distance decisions and unresolved models.
 

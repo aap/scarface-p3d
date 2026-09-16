@@ -16,7 +16,7 @@
 
 EXE = p3dview
 IMGUI_DIR = /u/aap/othersrc/imgui
-SOURCES = main.cpp p3dview.cpp camera.cpp gl.cpp glad/glad.c
+SOURCES = main.cpp p3dview.cpp explorer.cpp camera.cpp gl.cpp glad/glad.c
 SOURCES += $(IMGUI_DIR)/imgui.cpp $(IMGUI_DIR)/imgui_demo.cpp $(IMGUI_DIR)/imgui_draw.cpp $(IMGUI_DIR)/imgui_tables.cpp $(IMGUI_DIR)/imgui_widgets.cpp
 SOURCES += $(IMGUI_DIR)/backends/imgui_impl_sdl2.cpp $(IMGUI_DIR)/backends/imgui_impl_opengl3.cpp
 OBJS = $(addprefix build/, $(addsuffix .o, $(basename $(notdir $(SOURCES)))))

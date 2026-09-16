@@ -183,11 +183,11 @@ if(0)
 		const char *shot = getenv("P3D_SHOT");
 		int shotframe = getenv("P3D_SHOTFRAME") ? atoi(getenv("P3D_SHOTFRAME")) : 5;
 		if(shot && ++frame == shotframe) {
-			Screenshot(shot);
 			done = true;
 		}
 	}
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	if(done && getenv("P3D_SHOT")) Screenshot(getenv("P3D_SHOT"));
         SDL_GL_SwapWindow(window);
     }
 

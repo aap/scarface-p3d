@@ -44,6 +44,8 @@ public:
 		}
 	}
 	void Dump(void);
+	template <class F> void ForEach(F f) { for(auto it = store->begin(); it != store->end(); it++) f((u32)it->first, it->second); }
+	LoadInventory *GetParent(void) { return parent; }
 };
 
 }

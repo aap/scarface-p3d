@@ -40,6 +40,7 @@ struct Scene {
 
 pure3d::CompositeDrawable *composite;
 std::vector<renderer::Renderable*> renderables;
+std::vector<LoadedFile> loadedFiles;
 
 static void
 RegisterShapes(content::LoadInventory *inv)
@@ -120,6 +121,8 @@ InitApp(void)
 		tmp->SetParent(commonInv);
 		commonInv = tmp;
 		RegisterShapes(tmp);
+		tmp->AddRef();
+		loadedFiles.push_back(LoadedFile{commonfiles[i], tmp});
 	}
 
 	static const char *mapfiles[] = {
@@ -321,7 +324,8 @@ InitApp(void)
 		inv->Collect(renderables);
 		for(u32 i = first; i < renderables.size(); i++)
 			renderables[i]->AddRef();
-		inv->Release();
+		// keep the inventory for the explorer (the loader gave us a reference)
+		loadedFiles.push_back(LoadedFile{mapfiles[i], inv});
 	}
 	inv = nil;
 
@@ -352,7 +356,6 @@ InitApp(void)
 	}
 */
 
-	commonInv->Release();
 }
 
 using namespace pure3d;
@@ -392,10 +395,7 @@ Screenshot(const char *path)
 	printf("screenshot %s: %s\n", path, err ? lodepng_error_text(err) : "ok");
 }
 
-struct {
-	bool visible;
-	const char *shader;
-} shaderRenderable[] = {
+ShaderVis shaderRenderable[] = {
 	{ true, "error" },
 	{ true, "reflection" },
 	{ true, "simple" },
@@ -434,6 +434,7 @@ extern int nlists;
 void
 GUI(void)
 {
+	ExplorerGUI();
 	if(0) {
 		char lbl[64];
 		ImGui::Begin("Lists");
@@ -501,6 +502,7 @@ camPosition.x = -camPosition.x;
 	renderer::Display_List::Inst->Display();
 
 	context->End();
+	ExplorerDrawOverlay();
 }
 
 void
@@ -515,6 +517,8 @@ HandleSDLEvent(SDL_Event *event, bool ignoreMouse, bool ignoreKeybaord)
 		break;
 	case SDL_MOUSEBUTTONDOWN:
 		if(ignoreMouse) break;
+		if(event->button.button == SDL_BUTTON_LEFT && (SDL_GetModState() & KMOD_CTRL))
+			ExplorerPick(event->button.x, event->button.y);
 		input.tempState.m.buttons |= 1<<(event->button.button-1);
 		break;
 	case SDL_MOUSEBUTTONUP:
