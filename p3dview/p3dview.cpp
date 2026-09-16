@@ -87,6 +87,7 @@ InitApp(void)
 	content::loadManager->AddHandler(new pure3d::LightGroupLoader, pure3d::LightGroup::LIGHT_GROUP);
 	content::loadManager->AddHandler(new pure3d::LightAnimationLoader, pure3d::LightAnimation::ANIMATION);
 	content::loadManager->AddHandler(new pure3d::FrameControllerLoader, pure3d::LightAnimationController::FRAME_CONTROLLER);
+	content::loadManager->AddHandler(new pure3d::BillboardObjectLoader, pure3d::BillboardObjectLoader::BILLBOARD_QUAD_GROUP);
 
 	content::loadManager->AddHandler(new renderer::WorldGeoLoader, renderer::Renderable::WORLDGEO_LOADER);
 	content::loadManager->AddHandler(new renderer::ZonePkgLoader, renderer::Renderable::ZONEPKG_LOADER);
@@ -94,6 +95,7 @@ InitApp(void)
 	content::loadManager->AddHandler(new renderer::InstanceLoader(renderer::InstanceLoader::SCRIPTOBJECT), renderer::InstanceLoader::SCRIPTOBJECT);
 	content::loadManager->AddHandler(new renderer::InstanceLoader(renderer::InstanceLoader::GAMEGROUP), renderer::InstanceLoader::GAMEGROUP);
 	content::loadManager->AddHandler(new renderer::StreamTriggerLoader, renderer::StreamTriggerLoader::STREAMTRIGGER);
+	content::loadManager->AddHandler(new renderer::SkyLoader, renderer::Renderable::SKY_LOADER);
 
 
 	static const char *commonfiles[] = {

@@ -20,6 +20,7 @@
 #include "geometry.h"
 #include "skeleton.h"
 #include "light.h"
+#include "billboard.h"
 
 #include "pddi.h"
 
@@ -30,4 +31,5 @@
 #include "renderer/zonepkg.h"
 #include "renderer/instance.h"
 #include "renderer/lighting.h"
+#include "renderer/sky.h"
 #include "renderer/render_manager.h"

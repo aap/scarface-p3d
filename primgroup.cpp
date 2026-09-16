@@ -16,14 +16,55 @@ PrimGroup::PrimGroup(u32 vertexFormat, u32 vertexCount)
    mVertexFormat(vertexFormat),
    mVertexCount(vertexCount),
    mUnknown2(0xFFFFFFFF),
-   mPrimBuffer(nil)
+   mPrimBuffer(nil),
+   mFade(0.0f),
+   mBaseColours(nil)
 {
+}
+
+PrimGroup::~PrimGroup(void)
+{
+	delete[] mBaseColours;
 }
 
 void
 PrimGroup::Display(void)
 {
+	// TODO: a partial fade needs an alpha multiplier in the shaders; 1 is "gone"
+	if(mFade >= 1.0f)
+		return;
 	context->DrawPrimBuffer(mShader->GetShader(), mPrimBuffer);
+}
+
+void
+PrimGroup::SetBaseColours(const pddiColour *colours, u32 n)
+{
+	delete[] mBaseColours;
+	mBaseColours = new pddiColour[n];
+	for(u32 i = 0; i < n; i++)
+		mBaseColours[i] = colours[i];
+}
+
+void
+PrimGroup::SetVertexColourOffsets(const pddiColour *offsets, u32 n)
+{
+	if(mPrimBuffer == nil || mBaseColours == nil || (mVertexFormat & PDDI_V_COLOUR) == 0)
+		return;
+	if(n > mVertexCount)
+		n = mVertexCount;
+	pddiPrimBufferStream *stream = mPrimBuffer->Lock();
+	for(u32 i = 0; i < n; i++) {
+		u32 base = mBaseColours[i].c, off = offsets[i].c;
+		u32 col = 0;
+		for(int j = 0; j < 3; j++) {
+			u32 v = ((base>>(j*8))&0xFF) + ((off>>(j*8))&0xFF);
+			col |= (v > 255 ? 255 : v) << (j*8);
+		}
+		col |= base & 0xFF000000;
+		stream->Colour(pddiColour(col));
+		stream->Next();
+	}
+	mPrimBuffer->Unlock(stream);
 }
 
 void
@@ -70,8 +111,13 @@ PrimGroupLoader::Load(content::ChunkFile *f, PrimEntry *entry, content::LoadInve
 	if(!ParseHeader(f, inventory))
 		return;
 
-	// TODO: skinned and all arguments
-	if(!unk2 || !optimize || unk3)
+	// TODO: skinned and all arguments.
+	// unk3 != 0 means the prim group is vertex animated: the six sky box shapes carry
+	// 0x00121305/0x00121306/0x00010f02 morph targets (re/notes/sky.md) and retail keeps
+	// those in a streamed group so the animation can rewrite the vertices every frame.
+	// We have no vertex animation, so load them as ordinary optimized groups and show
+	// the rest pose --- without this there is no sky at all.
+	if(!unk2 || !optimize)
 		printf("skip load streamed\n");
 	else
 		LoadOptimized(entry, f, inventory);
@@ -256,14 +302,17 @@ PrimGroupLoader::LoadOptimized(PrimEntry *entry, ChunkFile *f, LoadInventory *in
 			if(mVertexFormat & PDDI_V_COLOUR) {
 				u32 n = f->GetI32();
 				assert(n == mVertexCount);
+				pddiColour *colours = new pddiColour[n];
+				f->GetData(colours, n, 4);
 				stream = buf->Lock();
-				pddiColour c;
-				while(n--) {
-					f->GetData(&c, 4);
-					stream->Colour(c);
+				for(u32 i = 0; i < n; i++) {
+					stream->Colour(colours[i]);
 					stream->Next();
 				}
 				buf->Unlock(stream);
+				// kept so the vertex colour animation can offset them
+				pg->SetBaseColours(colours, n);
+				delete[] colours;
 			}
 			break;
 

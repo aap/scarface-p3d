@@ -480,9 +480,17 @@ glPrimBuffer::Display(void)
 {
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
 	SetAttribDesc(attribs);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
 	state->Flush();
-	glDrawElements(primType, nIndices, GL_UNSIGNED_SHORT, 0);
+	// A prim group with no index list is drawn straight out of the vertex array ---
+	// the sky box shapes are 20..65 vertex triangle strips with no indices at all.
+	// (retail pddi: DrawIndexedPrimitive when there are indices, DrawPrimitive when
+	// there are not.)
+	if(nIndices == 0)
+		glDrawArrays(primType, 0, nVertices);
+	else {
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+		glDrawElements(primType, nIndices, GL_UNSIGNED_SHORT, 0);
+	}
 	ClearAttribDesc(attribs);
 }
 

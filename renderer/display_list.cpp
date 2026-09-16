@@ -576,16 +576,50 @@ return;
 // notes/displaylist.md §1; the ext(0x10b) shader-mode pairs and the instancing extension
 // are the fixed-function multi-pass trickery of the 2006 D3D8 path and are left out.
 
-// retail: 0x459a00. Drawn first, z-test and z-write off, fog off, translated to the
-// camera's XZ so the sky never moves. We have no EnableZBuffer in pddi yet, and no
-// SkyRenderable, so these two lists are empty.
+// retail: 0x459a00. Drawn first, z-test and z-write off, fog off, and translated to the
+// rendering camera's x/z --- with y left at 0 --- so the sky box turns with the camera
+// but does not rise and fall with it. 46 is the clear sky, 47 the rainy one, and only
+// 47 gets the container fade, which is the cross-fade between the two.
+// The translation goes on the stack BEFORE the node matrix, i.e. it is applied to the
+// vertex after it, in the space the pass transform maps from: the viewer's x flip is
+// that pass transform, so the camera position here is the native one, exactly like the
+// node matrices (renderer/README.md, "Coordinates in the viewer").
+// Neither list is culled: retail walks them straight through.
+void
+Display_List::RenderTranslatedList(i32 listID, const Matrix &translate, bool applyContainerFade)
+{
+if(nlists < (int)nelem(listorder)) listorder[nlists++] = listID;
+displistsize[listID] = lists[listID].length;
+if(!displistvisible[listID])
+return;
+	for(ListLink<DisplayListNode> *link = lists[listID].anchor.next; link; link = link->next) {
+		DisplayListNode *nd = (DisplayListNode*)link;
+		DrawablePrimitive *prim = nd->elem->prim;
+		if(applyContainerFade) prim->SetFade(nd->container->GetFadeAmount());
+		context->PushWorldMatrix();
+		context->MultWorldMatrix(translate);
+		context->MultWorldMatrix(nd->matrix);
+		prim->Display();
+		context->PopWorldMatrix();
+		if(applyContainerFade) prim->SetFade(0.0f);
+	}
+}
+
 void
 Display_List::RenderSky(void)
 {
+	Vector camPos;
+	View_GetRenderingCamera()->GetPosition(&camPos);
+	Matrix translate;
+	translate.Identity();
+	translate.SetPosition(Vector(camPos.x, 0.0f, camPos.z));
+
+	context->SetZTest(false);
 	context->SetZWrite(false);
-	RenderCulledList(46, false);
-	RenderCulledList(47, true);
+	RenderTranslatedList(46, translate, false);
+	RenderTranslatedList(47, translate, true);
 	context->SetZWrite(true);
+	context->SetZTest(true);
 }
 
 void Display_List::RenderLowLOD59(void)			{ RenderCulledList(59, false); }		// retail: 0x45d140
@@ -745,7 +779,19 @@ void Display_List::RenderWater65(void)			{ RenderCulledList(65, true); }		// ret
 void Display_List::RenderWaterSurface66(void)		{ RenderList(66, true); }		// retail: 0x459f70
 
 // retail: 0x459810 --- camera-locked, fog off, matrix translated to the camera
-void Display_List::RenderCameraLocked76(void)		{ RenderCulledList(76, true); }
+// retail: 0x459810 --- the same camera-locked walk as RenderSky, but translated to the
+// camera's FULL position (y included), so the sun, the flares and the stars sit at
+// infinity. Drawn near the end of the frame with fog off.
+void
+Display_List::RenderCameraLocked76(void)
+{
+	Vector camPos;
+	View_GetRenderingCamera()->GetPosition(&camPos);
+	Matrix translate;
+	translate.Identity();
+	translate.SetPosition(camPos);
+	RenderTranslatedList(76, translate, true);
+}
 
 
 // ---- group (B): drawn here when the camera is outside, last when it is inside -------

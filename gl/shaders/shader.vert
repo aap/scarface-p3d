@@ -29,6 +29,7 @@ uniform vec4 u_lightRange[MAXLIGHTS];	// x: inner range, y: outer range (point l
 
 uniform vec4 u_debug;	// x: no lighting, y: no vertex colours
 uniform vec4 u_vertexFade;	// x: start, y: end (view-space distance), z: enable
+uniform vec4 u_lit;	// x: the shader's PDDI_SP_ISLIT
 
 void
 main(void)
@@ -54,10 +55,13 @@ main(void)
 		float l = max(0.0, dot(N, -Ldir));
 		lighting += l*atten*u_lightColour[i].rgb;
 	}
+	lighting *= 2.0;
+	// an unlit pddi shader is texture*vertexColour and nothing else
+	if(u_lit.x == 0.0) lighting = vec3(1.0);
 	if(u_debug.x > 0.0) lighting = vec3(0.5);
 	vec4 col = u_debug.y > 0.0 ? vec4(1.0) : in_color;
 
-	v_color.rgb = lighting*2*col.bgr;
+	v_color.rgb = lighting*col.bgr;
 	v_color.a = col.a;
 	if(u_vertexFade.z > 0.0)
 		v_color.a *= clamp((length(viewPos.xyz) - u_vertexFade.x) / (u_vertexFade.y - u_vertexFade.x), 0.0, 1.0);
