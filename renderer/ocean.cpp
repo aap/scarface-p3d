@@ -6,7 +6,6 @@
 #include "../pddi.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <math.h>
 
 namespace renderer
@@ -83,6 +82,15 @@ OceanPrimitive::Display(void)
 {
 	if(ocean == nil)
 		return;
+	// Retail's projected grid is aligned to the camera's heading (0x6a0940 builds
+	// Scale(cameraHeight)*RotateY(-atan2(fwd.x, fwd.z))*Translate(camXZ)). The pure3d
+	// View has the camera; we take it off the pddi view matrix and flip x back, since
+	// the grid is built in native coordinates.
+	Matrix cam = context->GetViewMatrix();
+	cam.InvertOrtho();
+	Vector fwd = *cam.GetZ();		// gmath looks down -z
+	ocean->cameraForward = Vector(fwd.x, -fwd.y, -fwd.z);
+
 	// Both ocean shaders are unlit, so the pddi light slots never reach them; hand the
 	// frame's ambient and its directional lights to the grid builder, which does the
 	// same sum in the vertex colour (ocean.cpp). The zone group has two of them, the
@@ -169,7 +177,9 @@ OceanRenderable::Update(TimeInfo *t)
 	Ocean *o = GetOcean();
 	if(o == nil)
 		return;
-	o->Tick(t->dt*0.001f);
+	// retail's TimeInfo::dt is milliseconds; the viewer fills it with ImGui's
+	// DeltaTime, which is seconds, and the wave model works in seconds
+	o->Tick(t->dt);
 	container->GetPrimitive()->UpdateBounds();
 }
 

@@ -365,6 +365,8 @@ InitApp(void)
 		pure3d::Ocean *o = renderer::gOcean->GetOcean();
 		if(const char *e = getenv("P3D_SEALEVEL")) o->seaLevel = (float)atof(e);
 		if(const char *e = getenv("P3D_NOWAVES")) o->waves = atoi(e) == 0;
+		if(const char *e = getenv("P3D_NODETAIL")) o->detailPass = atoi(e) == 0;
+		if(const char *e = getenv("P3D_OCEANGRID")) o->projectedGrid = atoi(e) != 0;
 	}
 
 	// The game streams the map through art/levels/z04/streamgraph.p3d: the shells and

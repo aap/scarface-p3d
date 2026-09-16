@@ -315,24 +315,36 @@ being filled with a mirrored scene.
 
 ## 6. What the viewer does  ---  deviations
 
-`ocean.h`/`ocean.cpp` (pure3d) and `renderer/ocean.h`/`.cpp`. The class names, the layer, the
-sort key, the bounds and the parameter set are retail's; the drawing is not.
+`ocean.h`/`ocean.cpp` (pure3d: `WaveModel` and `Ocean`) and `renderer/ocean.h`/`.cpp`
+(`OceanRenderable` / `OceanContainer` / `OceanPrimitive` / `OceanRenderable_CreateInstance`).
+The class names, the layer, the sort key, the bounds, the wave model, the grid layout and the
+whole parameter set are retail's. What is not:
 
 | retail | viewer |
 |---|---|
-| a projected grid in camera space, three static LOD meshes, one draw call, no CPU vertex work | a camera-centred **world** grid (`gridCells` x `cellSize`, default 128 x 2 m) plus four flat trapezoids out to `farExtent` (20 km), rebuilt on the CPU every frame through a pddi prim buffer |
-| vertex = 3 floats, the height field and the normal come out of the vertex shader | vertex = position + normal + colour + uv, all evaluated on the CPU |
-| single pass, a d3d effect with 4 texture stages (animated EMBM bump, reflection, detail, foam) | two passes over the same buffer: an untextured "reflection" pass with z-write **off**, then `ocean_text` (the detail texture) alpha blended over it at `DetailOpacity` with z-write on. Pass 1 leaves the depth alone so that pass 2, at the same depth, still passes GL's default `GL_LESS`; pass 2 lays the water's depth down. |
-| the reflection is the sky rendered into `skyTexture` every frame, scaled by `ReflectionColourScale` | a constant `reflectionColour` stands in for that render target. It is pre-divided by the template's 0.25 so `ReflectionColourScale` still reads through as the game wrote it. |
-| the wave trains live 15 s, fade in and out and respawn; 16 of them, 4 reach the surface | the same six template parameters, but a fixed set of waves with a deterministic direction spread, no lifetime and no respawn. The amplitude is tapered to 0 over the outer fifth of the grid so the wavy part meets the flat skirt exactly. |
-| foam (`Water_Ocean_Foam.tga`, min/max height 0.15/1.0), specular highlights | neither; the textures are resolved and held, as retail does, and nothing reads them. The FOAM display lists (0 and 1) are dead on PC anyway. |
-| alpha blended at `ReflectionAlphaScale` = 0.98 | opaque |
-| the detail texture is mip mapped | the GL backend has no mip maps, so the detail pass is faded out over `detailFadeStart..detailFadeEnd` (80..250 m) before the 5 m tiling turns into noise. Past that band the water is the flat reflection colour, which the fog takes over from at 700 m at noon anyway. |
-| both ocean effects light the water themselves | `ocean_text` and the base shader are unlit pddi shaders, so the vertex colour carries the shading: `ambient + sum over the directional lights of N.L`, doubled, exactly what `gl/shaders/shader.vert` does for a lit shader. The zone group's two directional lights are the sun and a fill light pointing the other way, in collection order — taking only the first picks the fill. |
+| the projected grid is built **once** per LOD and a `Scale(cameraHeight)*RotateY(cameraYaw)*Translate(camXZ)` matrix plus the vertex shader do the rest | the same grid (§5's loop, same `fov*1.4` rows and `T/cos(A)` widths, same clamped far row) is rebuilt on the **CPU** every frame, because the height field has to be evaluated there. Default LOD is the middle one (110) instead of retail's 170; the wave evaluation, not the triangle count, is the cost. |
+| vertex = 3 floats; height, normal, uv, foam and colour all come out of the shader | vertex = position + normal + colour + uv, all evaluated on the CPU |
+| **one** pass, a d3d effect with four texture stages: an animated 64x64 EMBM bump map (30 frames), the reflection render target, the detail texture and the foam texture | **two** passes over the same buffer: an untextured "reflection" pass with z-write **off**, then `ocean_text` (the detail texture) alpha blended over it at `DetailOpacity` with z-write on. Pass 1 leaves the depth alone so pass 2, at the same depth, still passes GL's default `GL_LESS`; pass 2 lays the water's depth down. No bump map, no EMBM, no foam, no specular. |
+| the reflection is the sky rendered into `skyTexture` every frame (`Ocean::RenderReflection`, called from `Canvas::Render`), multiplied by `ReflectionColourScale` | a constant `reflectionColour` stands in for the render target. It is pre-divided by the template's 0.25 so `ReflectionColourScale` still reads through as the game wrote it. |
+| **four** of the sixteen wave trains displace the surface | all sixteen by default (`numSurfaceWaves`). With four the water is dead flat: the generator's cube puts the 10..20 cm ripples in the first slots, and everything you actually see in retail comes from the bump map we do not have. |
+| alpha blended at `ReflectionAlphaScale` = 0.98 | the reflection pass is opaque |
+| the detail texture is mip mapped and filtered by the hardware | the GL backend uploads no mip maps, so the detail pass is faded out by distance (`detailFadeStart/End`, 80..250 m) **and by the sine of the view elevation** (`detailGrazing`). Distance alone is not enough: at a metre or two above the water nearly the whole screen is grazing, and a texture that tiles every 5 m turns into moire there. The grazing term is also roughly where a real surface stops showing its own colour and becomes a mirror. |
+| both ocean effects light the water themselves | `ocean_text` and the base shader are unlit pddi shaders, so the vertex colour carries the shading: `ambient + sum of N.L over the directional lights`, doubled, exactly what `gl/shaders/shader.vert` does for a lit shader. The zone group's two directional lights are the sun and a fill light pointing the other way, in collection order --- taking only the first picks the fill. |
+| `TimeInfo::dt` is milliseconds | the viewer fills it with ImGui's `DeltaTime`, which is **seconds**, and the wave model works in seconds. A train that ages 1000x too slowly never leaves its 2 s fade-in and the water is flat. |
+| a wave shorter than the grid can carry is handled by the vertex shader, which has `1/quad-diagonal` per vertex | the same idea on the CPU: each wave is faded out between 1.5 and 3.5 grid cells per wavelength, using the local quad size of the projected grid. Without it the far rows alias badly. |
 
-Everything else is the game's: sea level 0, water colour 255/255/255,
-reflection scale 0.25/0.23/0.25/0.98, detail opacity 0.225, detail scale 0.2, foam 0.15/1.0,
-min/max wave length 0.1/12, amplitude ratio 0.013, wind 90° ± 30°, speed scale 1.2.
+There is also a square, camera-centred **world** grid (`projectedGrid = false`, and the
+automatic fallback when the camera is within a metre of the water, where a projected grid has
+nothing to project onto): `gridCells` x `cellSize` plus four flat trapezoids out to
+`farExtent`, with the waves tapered to zero over the outermost fifth so the two meet exactly.
 
-`renderer::g_oceanEnabled` is the on/off switch (there is no such global in retail; retail
-gates on `GetOceanLevelOfDetail() >= 0`), and the Explorer's View tab > Ocean has the rest.
+Everything else is the game's: sea level 0, water colour 255/255/255, reflection scale
+0.25/0.23/0.25/0.98, detail opacity 0.225, detail scale 0.2, foam 0.15/1.0, min/max wave length
+0.1/12, amplitude ratio 0.013, wind 90 +- 30 degrees, speed scale 1.2, sixteen trains with a
+15 s life and a 2 s fade, `WaveModel::Update` called twice per frame. The only value that is
+invented is `reflectionColour`, and the two anti-aliasing knobs above.
+
+`renderer::g_oceanEnabled` is the on/off switch (retail has no such global; it gates on
+`GetOceanLevelOfDetail() >= 0`). The Explorer's View tab > Ocean has the rest, including a live
+table of the sixteen wave trains. Env: `P3D_SEALEVEL`, `P3D_NOWAVES`, `P3D_NODETAIL`,
+`P3D_OCEANGRID=0` (the square grid).
