@@ -106,7 +106,17 @@ Implemented in the repo from these notes (2026-09-15, renderer:: restructured 20
     P3D_SELECT=<renderable name> selects at startup. View tab render options (pddiDebug in pddi.h, honoured by
     the GL shaders): no textures, no lighting, no vertex colours, wireframe; P3D_DEBUGRENDER=notex,nolight,novcol,wire.
   - p3dview: P3D_SHOT=file.png [P3D_SHOTFRAME=n] screenshot-and-quit, P3D_CAMPOS/P3D_CAMTARGET="x y z",
-    P3D_VERBOSE=1 prints per-world-geo distance decisions and unresolved models.
+    P3D_CAMPOS2="x y z" (jump there half way through a P3D_SHOT run, to exercise streaming),
+    P3D_VERBOSE=1 prints per-world-geo distance decisions, unresolved models and package loads/unloads.
+  - p3dview/streaming.cpp + renderer/streamgraph.*: the viewer streams the map the way the game does.
+    renderer::StreamTriggerLoader reads the 0x08800101 triggers of assets/art/levels/z04/streamgraph.p3d
+    (notes/streaming.md); every frame the triggers containing the camera (native coordinates) are looked up,
+    their Shell + Detail packages are loaded (one per frame, 10-20 ms each; everything at once on the first
+    frame), and a package no trigger has asked for in 3 s is unloaded (SetVisible(false) withdraws its display
+    list nodes, Scene::RemoveRenderable, inventory released). Outside every trigger the nearest one is used.
+    The region/global libraries stay resident. View tab > Streaming shows the current triggers and the
+    resident packages, with the delay and loads-per-frame knobs. P3D_STREAM=0 (or no streamgraph.p3d) loads
+    the whole static list instead, as before.
 
 SHR full source tree (extracted 2026-09-15): /u/aap/fun/ps2engines/extracted/shr  (code/ + libs/, 1.7 GB, 16k files)
   libs/radcontent/src/radload   = ancestor of content:: (inventory.cpp, manager.cpp, request.cpp, stream.cpp, hashtable.cpp)

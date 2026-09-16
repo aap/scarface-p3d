@@ -3,6 +3,8 @@
 #include "../pure3d.h"
 
 #include <SDL.h>
+#include <string>
+#include <vector>
 void HandleSDLEvent(SDL_Event *event, bool ignoreMouse, bool ignoreKeybaord);
 
 using namespace core;
@@ -54,9 +56,10 @@ void InitGL(void* loadproc);
 void InitScene(void);
 void RenderScene(void);
 void Screenshot(const char *path);
+void JumpCamera(const char *spec);	// "x y z", keeps the view direction
 
 struct LoadedFile {
-	const char *name;
+	std::string name;
 	content::LoadInventory *inv;
 };
 extern std::vector<LoadedFile> loadedFiles;

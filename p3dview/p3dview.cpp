@@ -11,6 +11,8 @@
 #include "glad/glad.h"
 
 #include "p3dview.h"
+#include "streaming.h"
+#include "../renderer/streamgraph.h"
 #include "camera.h"
 #include "../renderer/display_list.h"
 #include "../renderer/render_manager.h"
@@ -76,6 +78,7 @@ InitApp(void)
 	content::loadManager->AddHandler(new renderer::ZonePkgLoader, renderer::Renderable::ZONEPKG_LOADER);
 	content::loadManager->AddHandler(new renderer::InstanceLoader(renderer::InstanceLoader::SCRIPTOBJECT), renderer::InstanceLoader::SCRIPTOBJECT);
 	content::loadManager->AddHandler(new renderer::InstanceLoader(renderer::InstanceLoader::GAMEGROUP), renderer::InstanceLoader::GAMEGROUP);
+	content::loadManager->AddHandler(new renderer::StreamTriggerLoader, renderer::StreamTriggerLoader::STREAMTRIGGER);
 
 
 	static const char *commonfiles[] = {
@@ -315,34 +318,18 @@ InitApp(void)
 		"uginbar_01_detail.p3d",
 	};
 
-	content::LoadInventory *inv;
-	for(u32 i = 0; i < nelem(mapfiles); i++) {
-		char path[256];
-		sprintf(path, "../assets/packages/z04/%s", mapfiles[i]);
-		inv = content::loadManager->LoadFile(path, commonInv);
-
-		RegisterShapes(inv);
-		u32 first = renderables.size();
-		inv->Collect(renderables);
-		for(u32 i = first; i < renderables.size(); i++) {
-			renderables[i]->AddRef();
-			// retail: every creator ends with scenes[scene]->AddRenderable(r)
-			renderer::g_renderMgr->scenes[renderer::RenderManager::GAMEPLAY_SCENE]->AddRenderable(renderables[i]);
-		}
-		// keep the inventory for the explorer (the loader gave us a reference)
-		loadedFiles.push_back(LoadedFile{mapfiles[i], inv});
+	// The game streams the map through art/levels/z04/streamgraph.p3d: the shells and
+	// details of the triggers around the camera (p3dview/streaming.cpp). P3D_STREAM=0,
+	// or no graph, loads the whole static list above instead.
+	const char *e = getenv("P3D_STREAM");
+	bool stream = !(e && atoi(e) == 0);
+	if(!(stream && StreamingInit(commonInv))) {
+		streamingEnabled = false;
+		for(u32 i = 0; i < nelem(mapfiles); i++)
+			LoadPackage(mapfiles[i], commonInv, true);
+		int n = 0; for(u32 i = 0; i < packages.size(); i++) n += packages[i]->rends.size();
+		printf("loaded %zu packages, %d renderables\n", packages.size(), n);
 	}
-	inv = nil;
-
-	// bind eco prop placements to their InstanceShape meshes
-	int resolved = 0, unresolved = 0, nloc = 0;
-	for(u32 i = 0; i < renderables.size(); i++) {
-		renderer::InstanceRenderable *ir = dynamic_cast<renderer::InstanceRenderable*>(renderables[i]);
-		if(ir == nil || ir->modelName.empty()) continue;
-		if(renderer::ResolveInstanceShapes(ir)) { resolved++; nloc += ir->locations.size(); }
-		else { unresolved++; if(getenv("P3D_VERBOSE")) printf("no InstanceShape for %s\n", ir->modelName.c_str()); }
-	}
-	printf("instance objects: %d resolved (%d placements), %d unresolved\n", resolved, nloc, unresolved);
 
 
 /*
@@ -382,6 +369,16 @@ InitScene(void)
 		camera.m_target = camera.m_position + Vector(0.0f, 0.0f, -1.0f);
 	if((e = getenv("P3D_CAMTARGET")))
 		sscanf(e, "%f %f %f", &camera.m_target.x, &camera.m_target.y, &camera.m_target.z);
+}
+
+void
+JumpCamera(const char *spec)
+{
+	Vector p;
+	if(sscanf(spec, "%f %f %f", &p.x, &p.y, &p.z) != 3) return;
+	Vector dir = camera.m_target - camera.m_position;
+	camera.m_position = p;
+	camera.m_target = p + dir;
 }
 
 #include "../lodepng/lodepng.h"
@@ -493,6 +490,9 @@ RenderScene(void)
 	// keeps the culling and the rendering camera apart; the viewer uses one for both.
 	Vector camPosition = camera.m_position;
 	camPosition.x = -camPosition.x;
+	// stream the shells/details of the triggers around the camera in and out
+	StreamingUpdate(camPosition, timeStep);
+
 	renderer::Camera *cam = renderer::View_GetCullingCamera();
 	cam->SetPosition(camPosition);
 	cam->SetViewProjection(Multiply(flip, camera.m_viewMat), camera.m_projMat);

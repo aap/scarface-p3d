@@ -185,6 +185,9 @@ if(0)
 		if(shot && ++frame == shotframe) {
 			done = true;
 		}
+		// P3D_CAMPOS2="x y z": jump there half way, to exercise streaming
+		if(shot && getenv("P3D_CAMPOS2") && frame == shotframe/2)
+			JumpCamera(getenv("P3D_CAMPOS2"));
 	}
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 	if(done && getenv("P3D_SHOT")) Screenshot(getenv("P3D_SHOT"));

@@ -14,6 +14,7 @@
 #include "glad/glad.h"
 
 #include "p3dview.h"
+#include "streaming.h"
 #include "camera.h"
 #include "../renderer/display_list.h"
 
@@ -256,7 +257,7 @@ FilesTab(void)
 {
 	for(u32 f = 0; f < loadedFiles.size(); f++) {
 		LoadedFile &lf = loadedFiles[f];
-		if(!ImGui::TreeNode(lf.name)) continue;
+		if(!ImGui::TreeNode(lf.name.c_str())) continue;
 		std::map<std::string, ClassGroup> groups;
 		lf.inv->ForEach([&](u32 uid, IRefCount *obj) {
 			Entity *e = dynamic_cast<Entity*>(obj);
@@ -337,6 +338,8 @@ ViewTab(void)
 			ImGui::Checkbox(shaderRenderable[i].shader, &shaderRenderable[i].visible);
 		ImGui::TreePop();
 	}
+	ImGui::Separator();
+	StreamingGUI();
 }
 
 void
