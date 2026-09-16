@@ -22,11 +22,13 @@ uniform vec4 u_ambientColour;
 uniform vec4 u_lightDir1;
 uniform vec4 u_lightColour1;
 uniform vec4 u_debug;	// x: no lighting, y: no vertex colours
+uniform vec4 u_vertexFade;	// x: start, y: end (view-space distance), z: enable
 
 void
 main(void)
 {
-	gl_Position = u_proj * u_view * u_world * vec4(in_pos, 1.0);
+	vec4 viewPos = u_view * u_world * vec4(in_pos, 1.0);
+	gl_Position = u_proj * viewPos;
 	vec3 N = mat3(u_world) * in_normal;
 
 	vec3 lighting = u_ambientColour.rgb;
@@ -38,6 +40,8 @@ main(void)
 
 	v_color.rgb = lighting*2*col.bgr;
 	v_color.a = col.a;
+	if(u_vertexFade.z > 0.0)
+		v_color.a *= clamp((length(viewPos.xyz) - u_vertexFade.x) / (u_vertexFade.y - u_vertexFade.x), 0.0, 1.0);
 
 	v_tex0 = in_tex0;
 }

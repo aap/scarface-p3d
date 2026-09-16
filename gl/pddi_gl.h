@@ -243,10 +243,16 @@ public:
 	virtual void SetPass(int pass);
 };
 
+// retail d3dVertexFadeShader (ctor 0x7099b0, SetPass 0x709a30): untextured, lit,
+// alpha blended, ambient white / emissive black by default, and its vertex shader gets
+// the constants (200, 250, 0.1, ...) --- read as a fade-in band by distance from the
+// camera. The low-LOD city is drawn with it, so it vanishes where the real geometry is.
 class glVertexFadeShader : public glShader
 {
 public:
+	glVertexFadeShader(void);
 	virtual const char *GetType(void) { return "vertexfade"; }
+	virtual void SetPass(i32 pass);
 };
 
 
@@ -265,6 +271,9 @@ class glState
 	i32 u_lightDir1;
 	i32 u_lightColour1;
 	i32 u_debug;
+	i32 u_vertexFade;
+	Vector4 vertexFade;		// x: fade start, y: fade end (m from the camera), z: enable
+	u32 whiteTex;			// bound when a shader has no texture
 
 	pddiColour ambientColour;
 	Vector lightDir1;
@@ -277,6 +286,7 @@ public:
 	void SetMaterial(bool isLit, bool twoSided, const MaterialColours &colors);
 	// TODO: more
 	void SetTexture(pddiTexture *tex);
+	void SetVertexFade(float start, float end, bool enable) { vertexFade = Vector4(start, end, enable ? 1.0f : 0.0f, 0.0f); }
 
 	void SetAmbientColour(pddiColour col) { ambientColour = col; }
 	void SetLightDir(const Vector &dir) { lightDir1 = dir; }

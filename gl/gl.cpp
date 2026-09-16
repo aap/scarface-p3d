@@ -144,6 +144,9 @@ glState::glState(void)
 	u_lightDir1 = uniformRegistry.Register("u_lightDir1", UNIFORM_VEC4);
 	u_lightColour1 = uniformRegistry.Register("u_lightColour1", UNIFORM_VEC4);
 	u_debug = uniformRegistry.Register("u_debug", UNIFORM_VEC4);
+	u_vertexFade = uniformRegistry.Register("u_vertexFade", UNIFORM_VEC4);
+	vertexFade = Vector4(0.0f, 0.0f, 0.0f, 0.0f);
+	whiteTex = 0;
 }
 
 void
@@ -160,6 +163,7 @@ glState::Flush(void)
 	uniformRegistry.SetUniform(u_lightColour1, &col);
 	Vector4 dbg(pddiDebug.noLighting ? 1.0f : 0.0f, pddiDebug.noVertexColours ? 1.0f : 0.0f, pddiDebug.noTextures ? 1.0f : 0.0f, 0.0f);
 	uniformRegistry.SetUniform(u_debug, &dbg);
+	uniformRegistry.SetUniform(u_vertexFade, &vertexFade);
 	uniformRegistry.Flush();
 }
 
@@ -222,10 +226,20 @@ glState::SetMaterial(bool isLit, bool twoSided, const MaterialColours &colours)
 void
 glState::SetTexture(pddiTexture *tex)
 {
-	if(tex)
+	if(tex) {
 		tex->Bind(0);
-	else
-		glBindTexture(GL_TEXTURE_2D, 0);
+		return;
+	}
+	// an unbound sampler reads black; an untextured shader wants white * colour
+	if(whiteTex == 0) {
+		u8 px[4] = { 255, 255, 255, 255 };
+		glGenTextures(1, &whiteTex);
+		glBindTexture(GL_TEXTURE_2D, whiteTex);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	}
+	glBindTexture(GL_TEXTURE_2D, whiteTex);
 }
 
 

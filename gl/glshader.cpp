@@ -121,6 +121,21 @@ glShader::SetPass(i32 pass)
 	state->SetMaterial(isLit, twoSided, colours);
 	state->SetAlphaBlend(blendMode);
 	state->SetAlphaTest(alphaTest, alphaCompare, alphaRef);
+	state->SetVertexFade(0.0f, 0.0f, false);
+}
+
+glVertexFadeShader::glVertexFadeShader(void)
+{
+	colours.ambient = pddiColour(255, 255, 255);
+	colours.emissive = pddiColour(0, 0, 0);
+}
+
+void
+glVertexFadeShader::SetPass(i32 pass)
+{
+	glShader::SetPass(pass);
+	if(IsShadervisible(GetType()))
+		state->SetVertexFade(200.0f, 250.0f, true);
 }
 
 
