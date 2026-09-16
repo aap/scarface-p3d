@@ -11,6 +11,7 @@
 //         GamePlayScene::Render           Display_List::Render
 
 #include "render_manager.h"
+#include "lighting.h"
 #include "../pddi.h"
 
 #include <vector>
@@ -267,6 +268,9 @@ RenderManager::Init(i32 maxRenderables, i32 displayListNodes)
 	scenes[1] = new Scene(1, 64);
 	canvas = new Canvas;
 	canvas2 = new Canvas;
+	// retail: renderer::Init 0x465120 makes the light manager here too (g[0x8111cc])
+	if(gLightManager == nil)
+		gLightManager = new LightManager;
 	initialised = true;
 }
 
@@ -277,11 +281,15 @@ RenderManager::Update(TimeInfo *t)
 {
 	if(!canvas->enabled)
 		return;
+	// retail: LightManager::Update 0x460130, called from here (0x0046786a). It collects
+	// the lights that can reach the camera and hands them to the context.
+	if(gLightManager)
+		gLightManager->Update(t);
 	for(i32 i = 0; i < NUM_SCENES; i++)
 		if(scenes[i])
 			scenes[i]->Update(t);
-	// retail also updates the environment manager, the decal system and the light
-	// manager here, and the extra indoor pass when the camera is inside
+	// retail also updates the environment manager and the decal system here, and does
+	// the extra indoor pass when the camera is inside
 }
 
 // retail: renderer::RenderManager::Render 0x4689a0

@@ -123,6 +123,20 @@ Implemented in the repo from these notes (2026-09-15, renderer:: restructured 20
     The region/global libraries stay resident. View tab > Streaming shows the current triggers and the
     resident packages, with the delay and loads-per-frame knobs. P3D_STREAM=0 (or no streamgraph.p3d) loads
     the whole static list instead, as before.
+  - light.* + renderer/lighting.*: the map is lit with the game's own lights (notes/lighting.md).
+    pure3d::Light (0x13000 + the DIRECTION/POSITION/CONE/SHADOW/DECAY_RANGE children), LightGroup
+    (0x2380), the LITE time-of-day animation (0x121000, channels 'CLR\0'/'DIR\0' -- Scarface pads the
+    three-letter four-CCs with NUL where SHR uses a space) and LightAnimationController (0x121201),
+    plus renderer::SFLightGroupLoader/LightingRenderable (0x08800007) and renderer::LightManager
+    (retail g[0x8111cc]): groups filed by kind (0 zone_lights, 1 zone_rainlights, 2 exterior, 3
+    interior, 4 template), the zone group's controllers played at a settable hour, the local lights
+    picked by the retail rule (has a decay range, decay at the camera != 0, within 50 m), the
+    building ambient excluded as retail does, and the result pushed through a new pddiContext light
+    API (SetAmbientLight/SetLight/EnableLight, gl shader: ambient + 4 directional/point lights).
+    At noon the sun is 99,97,72 from (-0.47,-0.74,0.47) and the ambient 63,52,31 -- within a few
+    units of the values aap had eyeballed into glShader::SetPass. No pure3d::LightsChooser: one
+    light set per frame chosen at the camera, not four directional lights per lit object.
+    View tab > Lighting; P3D_TIME=<hours>, P3D_RAIN=1, P3D_NOGAMELIGHTS=1.
 
 SHR full source tree (extracted 2026-09-15): /u/aap/fun/ps2engines/extracted/shr  (code/ + libs/, 1.7 GB, 16k files)
   libs/radcontent/src/radload   = ancestor of content:: (inventory.cpp, manager.cpp, request.cpp, stream.cpp, hashtable.cpp)

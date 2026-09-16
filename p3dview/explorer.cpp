@@ -436,6 +436,74 @@ RenderablesTab(void)
 	}
 }
 
+// ---------------------------------------------------------------- lighting
+
+// What the world is lit with: the pure3d::LightGroup renderer::LightManager picked this
+// frame, the lights in it and the pddi slots they ended up in (renderer/lighting.cpp).
+static void
+LightingGUI(void)
+{
+	renderer::LightManager *lm = renderer::gLightManager;
+	if(lm == nil)
+		return;
+	if(!ImGui::CollapsingHeader("Lighting"))
+		return;
+
+	ImGui::Checkbox("game lights", &lm->enabled);
+	ImGui::SameLine();
+	ImGui::TextDisabled("(off: the old hardcoded 51,43,27 / 97,95,70 light)");
+	ImGui::BeginDisabled(!lm->enabled);
+	ImGui::Checkbox("time of day", &lm->animate); ImGui::SameLine();
+	ImGui::Checkbox("rain", &lm->raining); ImGui::SameLine();
+	ImGui::Checkbox("local lights", &lm->localLights);
+	ImGui::SliderFloat("hour", &lm->timeOfDay, 0.0f, 24.0f, "%.2f");
+	ImGui::Text("group: %s   frame %.1f/241", lm->activeGroup ? lm->activeGroup->GetName() : "(none)", lm->GetFrame());
+	pddiColour amb = lm->ambient;
+	float c[3] = { amb.R()/255.0f, amb.G()/255.0f, amb.B()/255.0f };
+	ImGui::ColorEdit3("ambient", c, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoPicker);
+	ImGui::SameLine();
+	ImGui::Text("%d, %d, %d", amb.R(), amb.G(), amb.B());
+
+	int maxLights = context ? context->GetMaxLights() : 0;
+	if(ImGui::BeginTable("lights", 4, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
+		ImGui::TableSetupColumn("light");
+		ImGui::TableSetupColumn("type");
+		ImGui::TableSetupColumn("colour");
+		ImGui::TableSetupColumn("direction / position");
+		ImGui::TableHeadersRow();
+		for(u32 i = 0; i < lm->active.size(); i++) {
+			pure3d::Light *l = lm->active[i].light;
+			pddiColour col = lm->active[i].colour;
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			if((int)i >= maxLights) ImGui::TextDisabled("%s", l->GetName());
+			else ImGui::Text("%s", l->GetName());
+			ImGui::TableNextColumn();
+			ImGui::Text("%s", l->type == pure3d::Light::DIRECTIONAL ? "directional" :
+			                  l->type == pure3d::Light::POINT ? "point" :
+			                  l->type == pure3d::Light::SPOT ? "spot" : "ambient");
+			ImGui::TableNextColumn();
+			float lc[3] = { col.R()/255.0f, col.G()/255.0f, col.B()/255.0f };
+			ImGui::PushID(i);
+			ImGui::ColorEdit3("", lc, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoPicker);
+			ImGui::PopID();
+			ImGui::SameLine();
+			ImGui::Text("%d,%d,%d", col.R(), col.G(), col.B());
+			ImGui::TableNextColumn();
+			if(l->type == pure3d::Light::DIRECTIONAL)
+				ImGui::Text("%.3f %.3f %.3f", l->direction.x, l->direction.y, l->direction.z);
+			else
+				ImGui::Text("%.1f %.1f %.1f  decay %.2f", l->position.x, l->position.y, l->position.z, lm->active[i].decay);
+		}
+		ImGui::EndTable();
+	}
+	ImGui::TextDisabled("%d registered groups: %d exterior, %d interior, %d template lights",
+	                    (int)(lm->exteriorGroups.size() + lm->interiorGroups.size()),
+	                    (int)lm->exteriorGroups.size(), (int)lm->interiorGroups.size(),
+	                    (int)lm->templateLights.size());
+	ImGui::EndDisabled();
+}
+
 // ---------------------------------------------------------------- view tab
 
 
@@ -469,6 +537,7 @@ ViewTab(void)
 			ImGui::Checkbox(shaderRenderable[i].shader, &shaderRenderable[i].visible);
 		ImGui::TreePop();
 	}
+	LightingGUI();
 	ImGui::Separator();
 	StreamingGUI();
 }

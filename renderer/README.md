@@ -15,6 +15,7 @@ the reasoning behind them is in `re/notes/` (start with `displaylist.md`, then
 | `display_list.*` | `Display_List`, `DisplayListNode` | the retained draw list, 84 buckets |
 | `view.*` | `Camera`, `View_Get/SetRenderingCamera`, `View_Get/SetCullingCamera` | where we look from, and the frustum |
 | `worldgeo.*`, `zonepkg.*`, `instance.*` | `WorldGeoRenderable`, `ZonePkgRenderable`, `InstanceRenderable` and their chunk loaders | the three renderable classes the viewer actually loads |
+| `lighting.*` | `LightingRenderable`, `SFLightGroupLoader`, `LightManager` | which of the game's own lights the frame is lit with |
 
 * **`RenderManager`** is *not* a renderer. It owns 4 scenes, 2 canvases and (in retail) 12
   memory heaps, the time-of-day manager and the decal / skid-mark / tracer pools.
@@ -146,11 +147,58 @@ there instead of the identity). The culling camera therefore also lives in nativ
 coordinates: `View_GetCullingCamera()` gets the position with x negated and a frustum taken
 out of `flip * view * proj`.
 
+## Lighting
+
+`lighting.*` is `renderer::LightingRenderable` (chunk `0x08800007`, `SFLightGroupLoader`)
+and `renderer::LightManager` (`gLightManager`, retail `g[0x008111cc]`); the `pure3d::Light`
+/ `LightGroup` / LITE-animation side is the top-level `light.*`. The whole story, with the
+chunk formats and which rules were read out of the disassembly, is in
+`re/notes/lighting.md`.
+
+The short version. A `LightingRenderable` **draws nothing**: its only job is to hand its
+`pure3d::LightGroup` to the light manager, which files it by the chunk's `kind`:
+
+| kind | n in z04 | what | where it goes |
+|---|---|---|---|
+| 0 | 2 | `zone_lights` — the daylight (sun, fill, ambient, building ambient) | `zoneGroup` |
+| 1 | 2 | `zone_rainlights` — the same four for rain | `zoneRainGroup` |
+| 2 | 30 | one per `*_detail` package: exterior night lights | `exteriorGroups` |
+| 3 | 116 | one per `*_shell` package: the lights of one interior | `interiorGroups` |
+| 4 | 1 | `lights_template`: lamp / headlight prototypes | `templateLights` |
+
+Once a frame (from `RenderManager::Update`, as retail does at `0x0046786a`)
+`LightManager::Update` rebuilds the active set:
+
+1. play the four `LightAnimationController`s of the active zone group onto their lights —
+   this **is** the time of day: 241 frames = 24 h, and at noon the sun is `99, 97, 72` from
+   `(-0.47, -0.74, 0.47)` and the ambient `63, 52, 31`;
+2. take every light of the zone group except `MiamiBuildingAmbientShape` (retail excludes
+   it too — it belongs to the `buildinglights` night windows);
+3. add the local lights **that have a decay range** and whose decay at the camera is not
+   zero, within 50 m — the same radius and the same "has a decay range" test retail uses;
+4. accumulate the ambient lights into one colour and push the rest into the pddi slots
+   through `pddiContext::SetAmbientLight` / `SetLight` / `EnableLight`.
+
+The "has a `0x00013006` decay range chunk" test is the whole trick: the four global
+sun/ambient lights are the only lights in the game without one.
+
+`gl/shaders/shader.vert` consumes 4 slots, directional or point (point lights use the
+decay range as the falloff), and `glShader::SetPass` no longer sets any light of its own.
+The View tab's **Lighting** header shows the active group, the hour, the ambient and every
+light with its colour and direction, and `game lights` off restores the old hardcoded
+`51,43,27` / `97,95,70`. Env knobs: `P3D_TIME=<hours>`, `P3D_RAIN=1`,
+`P3D_NOGAMELIGHTS=1`; `P3D_VERBOSE=1` prints the active set once.
+
+What is missing is `pure3d::LightsChooser`: retail reduces the world lights to four
+directional lights **per lit object**, so a lamp only outshines the sun for the car next to
+it. The viewer has one set per frame, chosen at the camera, and therefore keeps the zone
+lights in the first slots. `re/notes/lighting.md` §6 lists the rest.
+
 ## What is deliberately missing
 
 No reflection pass, no occluders (`occlude::IsBoxVisible` is a hook that always says
-"visible"), no light sets, no stencil shadow volumes, no shader-mode extension
-(`ext(0x10b)`) and no hardware instancing — the eco props are drawn one placement at a
-time. The indoor/outdoor deferral of group (B) in `Render()` exists but
+"visible"), no per-object light sets (see Lighting above), no stencil shadow volumes, no
+shader-mode extension (`ext(0x10b)`) and no hardware instancing — the eco props are drawn
+one placement at a time. The indoor/outdoor deferral of group (B) in `Render()` exists but
 `Display_List::cameraIndoors` is never set. `RenderManager::GetHeap` returns nil: there are
 no pools.

@@ -66,6 +66,15 @@ InitApp(void)
 	if(const char *h = getenv("P3D_HIDELIST"))
 		for(const char *p = h; *p; ) { renderer::displistvisible[atoi(p)] = false; while(*p && *p != ',') p++; if(*p) p++; }
 
+	// The lights are in native (file) coordinates and the viewer draws the world with x
+	// flipped. P3D_TIME=<hours> picks the point on the time-of-day curve (noon by
+	// default), P3D_RAIN=1 switches to the zone_rainlights group, P3D_NOGAMELIGHTS=1
+	// keeps the old hardcoded light.
+	renderer::gLightManager->flipX = true;
+	if(const char *e = getenv("P3D_TIME")) renderer::gLightManager->timeOfDay = (float)atof(e);
+	if(const char *e = getenv("P3D_RAIN")) renderer::gLightManager->raining = atoi(e) != 0;
+	if(const char *e = getenv("P3D_NOGAMELIGHTS")) renderer::gLightManager->enabled = atoi(e) == 0;
+
 
 	content::loadManager = new content::LoadManager;
 	content::loadManager->AddHandler(new content::P3DFileHandler, "p3d");
@@ -74,9 +83,14 @@ InitApp(void)
 	content::loadManager->AddHandler(new pure3d::GeometryLoader, pure3d::Geometry::MESH);
 	content::loadManager->AddHandler(new pure3d::CompositeDrawableLoader, pure3d::CompositeDrawable::COMPOSITE_DRAWABLE);
 	content::loadManager->AddHandler(new pure3d::SkeletonLoader, pure3d::Skeleton::SKELETON);
+	content::loadManager->AddHandler(new pure3d::LightLoader, pure3d::Light::LIGHT);
+	content::loadManager->AddHandler(new pure3d::LightGroupLoader, pure3d::LightGroup::LIGHT_GROUP);
+	content::loadManager->AddHandler(new pure3d::LightAnimationLoader, pure3d::LightAnimation::ANIMATION);
+	content::loadManager->AddHandler(new pure3d::FrameControllerLoader, pure3d::LightAnimationController::FRAME_CONTROLLER);
 
 	content::loadManager->AddHandler(new renderer::WorldGeoLoader, renderer::Renderable::WORLDGEO_LOADER);
 	content::loadManager->AddHandler(new renderer::ZonePkgLoader, renderer::Renderable::ZONEPKG_LOADER);
+	content::loadManager->AddHandler(new renderer::SFLightGroupLoader, renderer::Renderable::SFLIGHTGROUP_LOADER);
 	content::loadManager->AddHandler(new renderer::InstanceLoader(renderer::InstanceLoader::SCRIPTOBJECT), renderer::InstanceLoader::SCRIPTOBJECT);
 	content::loadManager->AddHandler(new renderer::InstanceLoader(renderer::InstanceLoader::GAMEGROUP), renderer::InstanceLoader::GAMEGROUP);
 	content::loadManager->AddHandler(new renderer::StreamTriggerLoader, renderer::StreamTriggerLoader::STREAMTRIGGER);
