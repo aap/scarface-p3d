@@ -316,6 +316,11 @@ ViewTab(void)
 	if(ImGui::DragFloat3("target", &t.x, 1.0f)) camera.m_target = t;
 	ImGui::DragFloat("far", &camera.m_far, 10.0f, 100.0f, 20000.0f);
 	ImGui::SliderFloat("instance cull", &renderer::InstanceRenderable::defaultCullMax, 50.0f, 1500.0f);
+	ImGui::SeparatorText("render");
+	ImGui::Checkbox("no textures", &pddiDebug.noTextures); ImGui::SameLine();
+	ImGui::Checkbox("no lighting", &pddiDebug.noLighting);
+	ImGui::Checkbox("no vertex colours", &pddiDebug.noVertexColours); ImGui::SameLine();
+	ImGui::Checkbox("wireframe", &pddiDebug.wireframe);
 	if(ImGui::TreeNode("display lists")) {
 		if(ImGui::Button("all")) for(int i = 0; i < renderer::NUM_DISPLAY_LISTS; i++) renderer::displistvisible[i] = true;
 		ImGui::SameLine();
@@ -341,6 +346,13 @@ ExplorerGUI(void)
 	static bool first = true;
 	if(first) {
 		first = false;
+		// P3D_DEBUGRENDER=notex,nolight,novcol,wire
+		if(const char *dr = getenv("P3D_DEBUGRENDER")) {
+			pddiDebug.noTextures = strstr(dr, "notex") != nil;
+			pddiDebug.noLighting = strstr(dr, "nolight") != nil;
+			pddiDebug.noVertexColours = strstr(dr, "novcol") != nil;
+			pddiDebug.wireframe = strstr(dr, "wire") != nil;
+		}
 		if(const char *want = getenv("P3D_SELECT"))
 			for(u32 i = 0; i < renderables.size(); i++)
 				if(strcmp(renderables[i]->GetName(), want) == 0 && renderables[i]->elements.Size() && renderables[i]->elements[0].prim.GetDrawable()) {

@@ -264,6 +264,7 @@ class glState
 	i32 u_ambientColour;
 	i32 u_lightDir1;
 	i32 u_lightColour1;
+	i32 u_debug;
 
 	pddiColour ambientColour;
 	Vector lightDir1;

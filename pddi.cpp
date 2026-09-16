@@ -7,6 +7,8 @@
 namespace pure3d
 {
 
+pddiDebugOptions pddiDebug = { false, false, false, false };
+
 pddiDevice *device;
 pddiContext *context;
 

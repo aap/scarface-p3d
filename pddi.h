@@ -280,6 +280,16 @@ public:
 };
 extern pddiDevice *device;
 
+// debug rendering options (viewer): honoured by the backend shaders
+struct pddiDebugOptions
+{
+	bool noTextures;	// sample white instead of the texture
+	bool noLighting;	// ignore normals/lights (vertex colour * texture only)
+	bool noVertexColours;	// treat vertex colours as white
+	bool wireframe;
+};
+extern pddiDebugOptions pddiDebug;
+
 class pddiContext : public pddiObject
 {
 public:

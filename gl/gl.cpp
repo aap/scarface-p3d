@@ -52,6 +52,7 @@ glContext::glContext(void)
 void
 glContext::Begin(void)
 {
+	glPolygonMode(GL_FRONT_AND_BACK, pddiDebug.wireframe ? GL_LINE : GL_FILL);
 	worldSP = 0;
 	worldMatrix[worldSP].Identity();
 }
@@ -142,6 +143,7 @@ glState::glState(void)
 	u_ambientColour = uniformRegistry.Register("u_ambientColour", UNIFORM_VEC4);
 	u_lightDir1 = uniformRegistry.Register("u_lightDir1", UNIFORM_VEC4);
 	u_lightColour1 = uniformRegistry.Register("u_lightColour1", UNIFORM_VEC4);
+	u_debug = uniformRegistry.Register("u_debug", UNIFORM_VEC4);
 }
 
 void
@@ -156,6 +158,8 @@ glState::Flush(void)
 	uniformRegistry.SetUniform(u_lightDir1, &lightDir1);
 	col = convCol(lightColour1);
 	uniformRegistry.SetUniform(u_lightColour1, &col);
+	Vector4 dbg(pddiDebug.noLighting ? 1.0f : 0.0f, pddiDebug.noVertexColours ? 1.0f : 0.0f, pddiDebug.noTextures ? 1.0f : 0.0f, 0.0f);
+	uniformRegistry.SetUniform(u_debug, &dbg);
 	uniformRegistry.Flush();
 }
 

@@ -94,7 +94,8 @@ Implemented in the repo from these notes (2026-09-15, renderer:: restructured 20
     zone package members, instance placements with jump, composite primitives, container elements with layer
     and shader, shader state), View tab (camera, instance cull, display-list and shader toggles).
     ctrl+click in the view picks the nearest object (ray vs bounding spheres), selection is outlined in red,
-    P3D_SELECT=<renderable name> selects at startup.
+    P3D_SELECT=<renderable name> selects at startup. View tab render options (pddiDebug in pddi.h, honoured by
+    the GL shaders): no textures, no lighting, no vertex colours, wireframe; P3D_DEBUGRENDER=notex,nolight,novcol,wire.
   - p3dview: P3D_SHOT=file.png [P3D_SHOTFRAME=n] screenshot-and-quit, P3D_CAMPOS/P3D_CAMTARGET="x y z",
     P3D_VERBOSE=1 prints per-world-geo distance decisions and unresolved models.
 
