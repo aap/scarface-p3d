@@ -127,6 +127,9 @@ public:
 	// +0x81
 	bool isInsideRoom : 1;			// 0x01, maintained by Renderable::UpdateRoom
 	bool isMatrixDirty : 1;			// 0x02
+	// not retail: measure the draw distance to the reference point, not to the
+	// bounding sphere (low_LOD_ world geo, whose sphere covers the whole city)
+	bool distanceToRefPoint : 1;
 
 	Renderable(i32 numElements);
 

@@ -154,8 +154,12 @@ if(draw == nil) continue;
 		worldgeo->isSkyline = true;
 	else if(strstr(compName, "shells_") == compName || strstr(compName, "underwater_") == compName)
 		worldgeo->drawFirst = true;
-	else if(strstr(compName, "low_LOD_") == compName)
+	else if(strstr(compName, "low_LOD_") == compName) {
 		worldgeo->isLowLOD = true;
+		// retail draws it through the base Display, measured to the zone package's 2-D
+		// point (miami_lod: 581..10000 m from a spot in north beach)
+		worldgeo->distanceToRefPoint = true;
+	}
 
 	if(!worldgeo->isLowLOD) {
 		i32 n = composite->GetPrimitiveList()->GetNumPrimitives();

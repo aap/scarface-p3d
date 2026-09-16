@@ -186,6 +186,7 @@ Renderable::Renderable(i32 numElements)
 	statePropFitsInPool = false;
 	shareLastElementFarDist = false;
 	useBoxBoundsFromPose = false;
+	distanceToRefPoint = false;
 
 	uniqueId = uniqueIdCounter++;
 	if(uniqueIdCounter == 0xffffffff) uniqueIdCounter = 1;
@@ -420,7 +421,7 @@ Renderable::Display(void)
 	// never reach this function --- WorldGeoRenderable::Display (0x471640) culls and
 	// fades their sub-primitives one by one instead. Until that path exists, measuring
 	// to the point culls half the map, so measure to the bounding sphere's surface.
-	float dist = Norm(ref - camPos) - lsph.radius;
+	float dist = Norm(ref - camPos) - (distanceToRefPoint ? 0.0f : lsph.radius);
 	if(dist < 0.0f) dist = 0.0f;
 	float scale = cam->GetDrawDistanceScale();
 	if(scale > 1.0f) scale = 1.0f;

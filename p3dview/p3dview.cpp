@@ -128,6 +128,15 @@ InitApp(void)
 		RegisterShapes(tmp);
 		tmp->AddRef();
 		loadedFiles.push_back(LoadedFile{commonfiles[i], tmp});
+		// the libraries also carry renderables: the low-LOD city/islands backdrop in
+		// miami_lod / islands_LOD (drawn from 581 m out), the sky in Common
+		std::vector<renderer::Renderable*> rs;
+		tmp->Collect(rs);
+		for(u32 j = 0; j < rs.size(); j++) {
+			rs[j]->AddRef();
+			renderer::g_renderMgr->scenes[renderer::RenderManager::GAMEPLAY_SCENE]->AddRenderable(rs[j]);
+			renderables.push_back(rs[j]);
+		}
 	}
 
 	static const char *mapfiles[] = {
