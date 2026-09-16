@@ -117,6 +117,7 @@ public:
 	pddiUVMode uvMode;
 
 	int isLit;
+	int isFogged;
 	int twoSided;
 	int multiCBV;
 
@@ -147,6 +148,7 @@ public:
 	}
 	void SetUVMode(pddiUVMode mode) { uvMode = mode; }
 	void EnableLighting(int enable) { isLit = enable; }
+	void EnableFog(int enable) { isFogged = enable; }
 	void SetTwoSided(int enable) { twoSided = enable; }
 	void EnableMultiCBV(int enable) { multiCBV = enable; }
 	void SetBlendMode(pddiBlendMode mode) { blendMode = mode; }
@@ -280,12 +282,21 @@ class glState
 	i32 u_debug;
 	i32 u_vertexFade;
 	i32 u_lit;
+	i32 u_fogColour;
+	i32 u_fogRange;
 	bool isLit;			// the shader's PDDI_SP_ISLIT
+	bool isFogged;			// the shader's PDDI_SP_ISFOGGED
 	Vector4 vertexFade;		// x: fade start, y: fade end (m from the camera), z: enable
 	u32 whiteTex;			// bound when a shader has no texture
 
 	pddiColour ambientColour;
 	pddiLightDesc lights[GL_MAX_LIGHTS];
+
+	// the pddiFogState of SHR's pddi/base/basecontext.hpp
+	bool fogEnabled;
+	pddiColour fogColour;
+	float fogStart, fogEnd;
+	u32 fogClamp;			// Scarface's SetFogClamp, 0..255
 public:
 	glState(void);
 	void Flush(void);
@@ -295,6 +306,22 @@ public:
 	// TODO: more
 	void SetTexture(pddiTexture *tex);
 	void SetVertexFade(float start, float end, bool enable) { vertexFade = Vector4(start, end, enable ? 1.0f : 0.0f, 0.0f); }
+
+	void EnableFog(bool enable) { fogEnabled = enable; }
+	bool IsFogEnabled(void) { return fogEnabled; }
+	void SetFog(pddiColour colour, float start, float end) {
+		fogColour = colour; fogStart = start; fogEnd = end;
+	}
+	void GetFog(pddiColour *colour, float *start, float *end) {
+		if(colour) *colour = fogColour;
+		if(start) *start = fogStart;
+		if(end) *end = fogEnd;
+	}
+	// pddiBaseContext::SetFogClamp 0x659db0 --- the only thing it does is clamp to 255
+	void SetFogClamp(u32 clamp) { fogClamp = clamp > 255 ? 255 : clamp; }
+	u32 GetFogClamp(void) { return fogClamp; }
+	// a shader with PDDI_SP_ISFOGGED = 0 opts out of the context's fog
+	void SetFogged(bool fogged) { isFogged = fogged; }
 
 	void SetAmbientColour(pddiColour col) { ambientColour = col; }
 	pddiColour GetAmbientColour(void) { return ambientColour; }
@@ -322,6 +349,13 @@ public:
 	virtual void SetLight(int handle, const pddiLightDesc *desc) { state->SetLight(handle, desc); }
 	virtual void EnableLight(int handle, bool enable) { state->EnableLight(handle, enable); }
 	virtual const pddiLightDesc *GetLight(int handle) { return state->GetLight(handle); }
+
+	virtual void EnableFog(bool enable) { state->EnableFog(enable); }
+	virtual bool IsFogEnabled(void) { return state->IsFogEnabled(); }
+	virtual void SetFog(pddiColour colour, float start, float end) { state->SetFog(colour, start, end); }
+	virtual void GetFog(pddiColour *colour, float *start, float *end) { state->GetFog(colour, start, end); }
+	virtual void SetFogClamp(u32 clamp) { state->SetFogClamp(clamp); }
+	virtual u32 GetFogClamp(void) { return state->GetFogClamp(); }
 
 	virtual void Begin(void);
 	virtual void End(void);

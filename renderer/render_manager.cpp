@@ -172,30 +172,45 @@ GamePlayScene::Update(TimeInfo *t)
 
 // retail: renderer::Canvas::Canvas 0x458210
 Canvas::Canvas(void)
- : enabled(true), backgroundColour(0xff191919), fogFadeTimeLeft(0.0f),
-   fogColour(0xff808080), fogStart(100.0f), fogEnd(1000.0f), fogDensity(200),
-   fogColourTo(0xff808080), fogStartTo(100.0f), fogEndTo(1000.0f), fogDensityTo(200)
+ : enabled(true), backgroundColour(0xff191919), fogEnabled(false), fogFadeTimeLeft(0.0f),
+   fogColour(0xff808080), fogStart(100.0f), fogEnd(1000.0f), fogClamp(200),
+   fogColourTo(0xff808080), fogStartTo(100.0f), fogEndTo(1000.0f), fogClampTo(200)
 {
 }
 
 // retail: renderer::Canvas::SetFog 0x458300
 void
-Canvas::SetFog(bool on, u32 colour, float start, float end, i32 density, float time)
+Canvas::SetFog(bool on, u32 colour, float start, float end, i32 clamp, float time)
 {
+	fogEnabled = on;
 	if(time > 0.0f && on) {
 		fogColourTo = colour;
 		fogStartTo = start;
 		fogEndTo = end;
-		fogDensityTo = density;
+		fogClampTo = clamp;
 		fogFadeTimeLeft = time;
 	} else {
 		fogColour = colour;
 		fogStart = start;
 		fogEnd = end;
-		fogDensity = density;
+		fogClamp = clamp;
 		fogFadeTimeLeft = 0.0f;
 	}
 	// retail then writes the current values into the pure3d::View (+0x30..+0x3c)
+}
+
+// Retail's fog lives in the pure3d::View, which hands it to pddi in View::BeginRender
+// (0x67ddb0) --- three calls, in this order, and the last two only when fog is on:
+//     ctx->EnableFog(on); ctx->SetFog(colour, start, end); ctx->SetFogClamp(clamp);
+// We have no View, so the canvas talks to the context itself.
+void
+Canvas::ApplyFog(void)
+{
+	context->EnableFog(fogEnabled);
+	if(fogEnabled) {
+		context->SetFog(pddiColour(fogColour), fogStart, fogEnd);
+		context->SetFogClamp(fogClamp);
+	}
 }
 
 // retail: renderer::Canvas::UpdateFog 0x458390 --- lerp each ARGB byte and each float
@@ -211,7 +226,7 @@ Canvas::UpdateFog(TimeInfo *t)
 		fogColour = fogColourTo;
 		fogStart = fogStartTo;
 		fogEnd = fogEndTo;
-		fogDensity = fogDensityTo;
+		fogClamp = fogClampTo;
 		fogFadeTimeLeft = 0.0f;
 	} else {
 		u32 c = 0;
@@ -223,7 +238,7 @@ Canvas::UpdateFog(TimeInfo *t)
 		fogColour = c;
 		fogStart += (fogStartTo - fogStart)*k;
 		fogEnd += (fogEndTo - fogEnd)*k;
-		fogDensity += (i32)((fogDensityTo - fogDensity)*k);
+		fogClamp += (i32)((fogClampTo - fogClamp)*k);
 	}
 }
 
@@ -234,7 +249,85 @@ Canvas::RenderScene(Scene *scene, TimeInfo *t)
 	if(!enabled)
 		return;
 	UpdateFog(t);
+	ApplyFog();
 	scene->Render();
+}
+
+
+// ---------------------------------------------------------------- EnvManager
+
+// retail: RenderManager::env, created by RenderManager::Init
+EnvManager *gEnvManager;
+
+// The game's own fog, per time of day. The six key frames are the TODObject "tod" of
+// packages/z04/miami_lod.p3d (PrelitLuminanceTime_0..5 = 4, 9, 12, 18, 21, 24 h) and the
+// numbers are the FogStart/FogEnd/FogColor_Red/Green/Blue/Alpha/FogClamp properties of
+// the twelve environment_{clear,rainy}_{4,9,12,18,21,24} EnvironmentObjects it attaches,
+// which live in scriptc/graphanims.cso of cement.rcf. FogEnabled is 1 in all twelve.
+// re/notes/fog.md has the table and how it was read out of the compiled script.
+const EnvManager::KeyFrame EnvManager::keyFrames[EnvManager::NUM_KEYFRAMES] = {
+	//                 r    g    b    a  start   end  clamp
+	{  4.0f, FogParameters( 23,  28,  40,  95,  20.0f, 800.0f, 10.0f),
+	         FogParameters( 16,  16,  17,  95,  10.0f, 525.0f, 18.0f) },
+	{  9.0f, FogParameters(245, 240, 160, 128,  25.0f, 800.0f, 70.0f),
+	         FogParameters( 35,  35,  23, 128,  20.0f, 700.0f, 50.0f) },
+	{ 12.0f, FogParameters(200, 200, 150, 110,  25.0f, 900.0f, 60.0f),
+	         FogParameters( 35,  35,  28, 110,  20.0f, 700.0f, 45.0f) },
+	{ 18.0f, FogParameters(227, 223, 105, 150,  25.0f, 800.0f, 65.0f),
+	         FogParameters( 35,  35,  21, 150,  20.0f, 600.0f, 55.0f) },
+	{ 21.0f, FogParameters( 50,  35,  33,  95,  20.0f, 800.0f, 45.0f),
+	         FogParameters( 26,  21,  21,  95,  20.0f, 700.0f, 45.0f) },
+	{ 24.0f, FogParameters( 20,  25,  32,  95,  20.0f, 800.0f, 15.0f),
+	         FogParameters( 14,  14,  16,  95,  10.0f, 500.0f, 20.0f) },
+};
+
+static FogParameters
+LerpFog(const FogParameters &a, const FogParameters &b, float t)
+{
+	FogParameters f;
+	f.enabled = a.enabled;
+	f.r = a.r + (i32)((b.r - a.r)*t);
+	f.g = a.g + (i32)((b.g - a.g)*t);
+	f.b = a.b + (i32)((b.b - a.b)*t);
+	f.a = a.a + (i32)((b.a - a.a)*t);
+	f.start = a.start + (b.start - a.start)*t;
+	f.end = a.end + (b.end - a.end)*t;
+	f.clamp = a.clamp + (b.clamp - a.clamp)*t;
+	return f;
+}
+
+FogParameters
+EnvManager::GetFog(float hour, bool raining) const
+{
+	// the keys are 4, 9, 12, 18, 21 and 24 h; before the first one we come round from
+	// the last, which is the same midnight
+	while(hour < 0.0f) hour += 24.0f;
+	while(hour >= 24.0f) hour -= 24.0f;
+	i32 i1 = 0;
+	while(i1 < NUM_KEYFRAMES && keyFrames[i1].hour < hour)
+		i1++;
+	if(i1 >= NUM_KEYFRAMES)
+		i1 = NUM_KEYFRAMES-1;
+	i32 i0 = i1 == 0 ? NUM_KEYFRAMES-1 : i1-1;
+	float h0 = i1 == 0 ? keyFrames[i0].hour - 24.0f : keyFrames[i0].hour;
+	float t = keyFrames[i1].hour > h0 ? (hour - h0)/(keyFrames[i1].hour - h0) : 0.0f;
+	if(t < 0.0f) t = 0.0f;
+	if(t > 1.0f) t = 1.0f;
+	return raining ? LerpFog(keyFrames[i0].rainy, keyFrames[i1].rainy, t) :
+	                 LerpFog(keyFrames[i0].clear, keyFrames[i1].clear, t);
+}
+
+// retail: the fog half of EnvManager::Update 0x46c1d0 --- it builds a FogParameters out
+// of the interpolated env parameters and calls View_SetFog, which is Canvas::SetFog on
+// both canvases. We snap (time 0), like the env manager does.
+void
+EnvManager::Update(Canvas *canvas, float hour, bool raining)
+{
+	if(!enabled || canvas == nil)
+		return;
+	// retail: View_SetFog 0x464e40 --- pack the colour, truncate the clamp, time 0
+	FogParameters f = GetFog(hour, raining);
+	canvas->SetFog(f.enabled, f.Colour().c, f.start, f.end, (i32)f.clamp, 0.0f);
 }
 
 
@@ -273,6 +366,9 @@ RenderManager::Init(i32 maxRenderables, i32 displayListNodes)
 	scenes[1] = new Scene(1, 64);
 	canvas = new Canvas;
 	canvas2 = new Canvas;
+	// retail: the environment manager is RenderManager+0x1c, built here (ctor 0x46bd80)
+	if(gEnvManager == nil)
+		gEnvManager = new EnvManager;
 	// retail: renderer::Init 0x465120 makes the light manager here too (g[0x8111cc])
 	if(gLightManager == nil)
 		gLightManager = new LightManager;
@@ -290,6 +386,11 @@ RenderManager::Update(TimeInfo *t)
 	// the lights that can reach the camera and hands them to the context.
 	if(gLightManager)
 		gLightManager->Update(t);
+	// retail: EnvManager::Update 0x46c1d0, called from here too. It blends the two env
+	// parameter sets around the clock and pushes the fog out through View_SetFog, i.e.
+	// Canvas::SetFog on both canvases. The viewer has one clock, LightManager's.
+	if(gEnvManager && gLightManager)
+		gEnvManager->Update(canvas, gLightManager->timeOfDay, gLightManager->raining);
 	for(i32 i = 0; i < NUM_SCENES; i++)
 		if(scenes[i])
 			scenes[i]->Update(t);

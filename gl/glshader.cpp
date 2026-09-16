@@ -22,6 +22,7 @@ glShader::glShader(void)
 	uvMode = PDDI_UV_TILE;
 	twoSided = 0;
 	isLit = false;
+	isFogged = true;	// pddi fogs everything unless the shader says otherwise
 	colours.ambient = pddiColour(255, 255, 255);
 	alphaTest = false;
 	alphaCompare = PDDI_COMPARE_GREATEREQUAL;
@@ -67,6 +68,7 @@ pddiShadeTextureTable glShader::glTextureTable[] = {
 pddiShadeIntTable glShader::glIntTable[] = {
 	{ PDDI_SP_UVMODE, SHADE_INT(&glShader::SetUVMode)  },
 	{ PDDI_SP_ISLIT, SHADE_INT(&glShader::EnableLighting)  },
+	{ PDDI_SP_ISFOGGED, SHADE_INT(&glShader::EnableFog)  },
 	{ PDDI_SP_TWOSIDED, SHADE_INT(&glShader::SetTwoSided)  },
 	{ PDDI_SP_BLENDMODE, SHADE_INT(&glShader::SetBlendMode)  },
 
@@ -118,6 +120,7 @@ glShader::SetPass(i32 pass)
 	state->SetAlphaBlend(blendMode);
 	state->SetAlphaTest(alphaTest, alphaCompare, alphaRef);
 	state->SetVertexFade(0.0f, 0.0f, false);
+	state->SetFogged(isFogged);
 }
 
 glVertexFadeShader::glVertexFadeShader(void)

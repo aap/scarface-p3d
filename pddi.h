@@ -33,6 +33,10 @@ enum {
 
 	PDDI_SP_TWOSIDED	= FOURCC("2SID"),
 
+	// SHR pddishade.hpp: PDDI_FOURCC('F','O','G',0). A shader that clears it is
+	// never fogged, whatever the context's fog state is.
+	PDDI_SP_ISFOGGED	= FOURCC("FOG"),
+
 	PDDI_SP_ENVBLEND	= FOURCC("ENVB"),
 
 	PDDI_SP_ZWRITE		= FOURCC("ZWRT"),
@@ -325,6 +329,7 @@ struct pddiDebugOptions
 	bool noLighting;	// ignore normals/lights (vertex colour * texture only)
 	bool noVertexColours;	// treat vertex colours as white
 	bool wireframe;
+	bool fogClamp;		// cap the fog amount at the context's FogClamp/255
 };
 extern pddiDebugOptions pddiDebug;
 
@@ -364,6 +369,24 @@ public:
 	virtual void SetLight(int handle, const pddiLightDesc *desc) {}
 	virtual void EnableLight(int handle, bool enable) {}
 	virtual const pddiLightDesc *GetLight(int handle) { return nil; }
+
+	// fog. The names and the signature are pddi's own (SHR pddi/pddi.hpp, implemented
+	// in pddi/base/basecontext.cpp as a pddiFogState and in pddi/dx8/context.cpp as
+	// D3DRS_FOGENABLE / FOGTABLEMODE=LINEAR / FOGCOLOR / FOGSTART / FOGEND). Retail
+	// Scarface keeps the same interface --- the fog state object is g[0x768628].
+	// EnableFog/IsFogEnabled is the pair the display list brackets the sky and the
+	// camera-locked lists with.
+	virtual void EnableFog(bool enable) {}
+	virtual bool IsFogEnabled(void) { return false; }
+	virtual void SetFog(pddiColour colour, float start, float end) {}
+	virtual void GetFog(pddiColour *colour, float *start, float *end) {}
+	// Scarface's own addition to pddi (context vslots +0x168/+0x16c, base
+	// implementations 0x659db0/0x659de0 --- d3dContext does NOT override them, so the
+	// clamp reaches no D3D render state). It is the EnvironmentObject's FogClamp,
+	// 0..255, and the d3d shaders pass it on as the w of vertex constant c49 =
+	// (start, end, 1.25/(start+end), clamp/255). re/notes/fog.md.
+	virtual void SetFogClamp(u32 clamp) {}
+	virtual u32 GetFogClamp(void) { return 255; }
 };
 extern pddiContext *context;
 

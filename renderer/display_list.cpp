@@ -614,12 +614,15 @@ Display_List::RenderSky(void)
 	translate.Identity();
 	translate.SetPosition(Vector(camPos.x, 0.0f, camPos.z));
 
+	bool fog = context->IsFogEnabled();
+	context->EnableFog(false);
 	context->SetZTest(false);
 	context->SetZWrite(false);
 	RenderTranslatedList(46, translate, false);
 	RenderTranslatedList(47, translate, true);
 	context->SetZWrite(true);
 	context->SetZTest(true);
+	context->EnableFog(fog);
 }
 
 void Display_List::RenderLowLOD59(void)			{ RenderCulledList(59, false); }		// retail: 0x45d140
@@ -658,12 +661,16 @@ Display_List::RenderOpaqueBuildings_21_27_28_35_43(void)
 void
 Display_List::RenderEnv_9_10(void)
 {
+	// retail turns the fog back on with a hard-coded EnableFog(true) here (0x45e902),
+	// unlike the sky and list 76, which restore the saved flag
+	context->EnableFog(false);
 	context->SetZWrite(false);
 	context->SetColourWrite(true, true, true, false);
 	RenderCulledList(9, false);
 	RenderCulledList(10, true);
 	context->SetColourWrite(true, true, true, true);
 	context->SetZWrite(true);
+	context->EnableFog(true);
 }
 
 void Display_List::RenderSpecular_13_15(void)		{ RenderCulledList(13, false); RenderCulledList(15, false); }	// retail: 0x45deb0
@@ -676,8 +683,13 @@ Display_List::RenderDecals_3_17_18_4_75(void)
 {
 	RenderCulledList(3, false);
 	RenderCulledList(17, false);
+	context->EnableFog(false);
 	RenderCulledList(18, false);
+	context->EnableFog(true);
+
+	context->EnableFog(false);
 	RenderCulledList(4, false);
+	context->EnableFog(true);
 	RenderList(75, true);
 }
 
@@ -725,12 +737,23 @@ Display_List::RenderDecalsFading_5_19_20_6(void)
 {
 	RenderCulledList(5, true);
 	RenderList(19, true);
+	context->EnableFog(false);
 	RenderCulledList(20, true);
+	context->EnableFog(true);
+
+	context->EnableFog(false);
 	RenderCulledList(6, true);
+	context->EnableFog(true);
 }
 
 // retail: 0x45db80 --- night lights, fog forced off
-void Display_List::RenderNightLights11(void)		{ RenderCulledList(11, true); }
+void
+Display_List::RenderNightLights11(void)
+{
+	context->EnableFog(false);
+	RenderCulledList(11, true);
+	context->EnableFog(true);
+}
 // retail: 0x45da30
 void Display_List::RenderCardsNight12(void)		{ RenderCulledList(12, true); }
 
@@ -790,7 +813,10 @@ Display_List::RenderCameraLocked76(void)
 	Matrix translate;
 	translate.Identity();
 	translate.SetPosition(camPos);
+	bool fog = context->IsFogEnabled();
+	context->EnableFog(false);
 	RenderTranslatedList(76, translate, true);
+	context->EnableFog(fog);
 }
 
 

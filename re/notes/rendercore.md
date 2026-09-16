@@ -29,7 +29,7 @@ through a flat C-style façade; matching those 100-odd names against the façade
   sorted, batched drawing. The other three draw immediately (vslot 11) — they are the HUD /
   frontend / panel layers.
 * **`Canvas`** is *not* a render target. It is a **`pure3d::View` + animated fog** (colour, near,
-  far, density, transition time) + the enable flag. `Canvas::RenderScene` = "tick the fog fade,
+  far, clamp, transition time) + the enable flag. `Canvas::RenderScene` = "tick the fog fade,
   then tell the scene to render".
 * **`RenderFlowClient`** is the **frame entry point** — one object, one virtual (`slot 2`) that the
   outer game loop calls once a frame. Its ctor *is* `renderer::Init`.
@@ -365,25 +365,28 @@ renderer::Canvas                                       (0x38)
   +0x18  u32            fogColour   = 0xff808080
   +0x1c  float          fogStart    = 100.0f
   +0x20  float          fogEnd      = 1000.0f
-  +0x24  i32            fogDensity  = 200
+  +0x24  i32            fogClamp    = 200   // EnvironmentObject::FogClamp, NOT a density
+                                             // (notes/fog.md §2)
   // --- target fog (what we are interpolating towards) ---
   +0x28  u32            fogColourTo
   +0x2c  float          fogStartTo
   +0x30  float          fogEndTo
-  +0x34  i32            fogDensityTo
+  +0x34  i32            fogClampTo
 ```
 
 ```c
-void Canvas::SetFog(bool on, u32 colour, float start, float end, int density, float time)
-{                                                                   // 0x458300 [V]
+void Canvas::SetFog(bool on, u32 colour, float start, float end, int clamp, float time)
+{                                          // 0x458300 [V]. The only producer, View_SetFog
+                                           // 0x464e40, always passes time = 0, so the
+                                           // animated branch is dead on PC (notes/fog.md)
     view->+0xc0 = on;                                               // fog enable
     if (time > 0.0f && on) {                                        // animate
         fogColourTo = colour; fogStartTo = start; fogEndTo = end;
-        fogDensityTo = density; fogFadeTimeLeft = time;
+        fogClampTo = clamp; fogFadeTimeLeft = time;
     } else {                                                        // snap
-        fogColour = colour; fogStart = start; fogEnd = end; fogDensity = density;
+        fogColour = colour; fogStart = start; fogEnd = end; fogClamp = clamp;
         fogFadeTimeLeft = 0;
-        view->+0x30 = colour; view->+0x34 = start; view->+0x38 = end; view->+0x3c = density;
+        view->+0x30 = colour; view->+0x34 = start; view->+0x38 = end; view->+0x3c = clamp;
     }
 }
 
@@ -394,15 +397,15 @@ void Canvas::UpdateFog(TimeInfo *t)                                 // 0x458390 
     fogFadeTimeLeft -= t->dt;
     if (fogFadeTimeLeft <= 0.0f) {          // done: snap to target
         fogColour = fogColourTo; fogStart = fogStartTo;
-        fogEnd = fogEndTo; fogDensity = fogDensityTo; fogFadeTimeLeft = 0;
+        fogEnd = fogEndTo; fogClamp = fogClampTo; fogFadeTimeLeft = 0;
     } else {                                // lerp each ARGB byte and each float by k
         lerp(fogColour.r/g/b, fogColourTo, k);
         fogStart   += (fogStartTo  - fogStart)  * k;
         fogEnd     += (fogEndTo    - fogEnd)    * k;
-        fogDensity += (int)((fogDensityTo - fogDensity) * k);
+        fogClamp += (int)((fogClampTo - fogClamp) * k);
     }
     view->+0x30 = fogColour; view->+0x34 = fogStart;
-    view->+0x38 = fogEnd;    view->+0x3c = fogDensity;
+    view->+0x38 = fogEnd;    view->+0x3c = fogClamp;
 }
 
 void Canvas::RenderScene(Scene *s, TimeInfo *t) {                   // 0x458620 [V]
@@ -771,7 +774,7 @@ All have the same body: `GetHash(name)` → `inventory->Find<T>(uid)` → `memor
 | `0x00461ad0` | `View_GetCullingCamera()` → `g[0x8111dc]` (this is what `Renderable::Display` uses) |
 | `0x00464ca0` | `View_SetRenderingCamera(Camera*)` — also stores into `canvas->camera` and the `pure3d::View` |
 | `0x00464d00` | `View_SetCullingCamera(Camera*)` |
-| `0x00461ed0` | `View_SetFog(FogParameters)` — applies to **both** canvases and caches in `env+0xc28..0xc30` |
+| `0x00461ed0` | `Canvas_SetFogBoth(on, colour, start, end, clamp, time)` — applies to **both** canvases and caches in `env+0xc28..0xc30`; `View_SetFog(FogParameters)` proper is `0x00464e40`, which packs the colour (notes/fog.md) |
 | `0x00461f70` | `View_GetFog(FogParameters*)` — 0x18 bytes from `env+0xcc` |
 | `0x00461fd0` | `View_EnableDepthOfField(DOFParameters /*0x34*/)` → pddi ext `0x103` |
 | `0x00462100` | `View_GetDepthOfField ?` → pddi ext `0x103` |

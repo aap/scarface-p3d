@@ -74,6 +74,9 @@ InitApp(void)
 	if(const char *e = getenv("P3D_TIME")) renderer::gLightManager->timeOfDay = (float)atof(e);
 	if(const char *e = getenv("P3D_RAIN")) renderer::gLightManager->raining = atoi(e) != 0;
 	if(const char *e = getenv("P3D_NOGAMELIGHTS")) renderer::gLightManager->enabled = atoi(e) == 0;
+	// P3D_NOFOG=1 leaves the canvas fog alone (and off); the View tab has the knobs
+	if(const char *e = getenv("P3D_NOFOG"))
+		if(atoi(e) != 0) renderer::gEnvManager->enabled = false;
 
 
 	content::loadManager = new content::LoadManager;

@@ -10,6 +10,7 @@ const char *shader_vert_src =
 "\n"
 "varying vec4 v_color;\n"
 "varying vec2 v_tex0;\n"
+"varying float v_fogDist;\n"
 "\n"
 "uniform mat4 u_world;\n"
 "uniform mat4 u_view;\n"
@@ -68,5 +69,10 @@ const char *shader_vert_src =
 "		v_color.a *= clamp((length(viewPos.xyz) - u_vertexFade.x) / (u_vertexFade.y - u_vertexFade.x), 0.0, 1.0);\n"
 "\n"
 "	v_tex0 = in_tex0;\n"
+"	// pddiContext::SetFog is linear fog over the distance from the camera. Retail's\n"
+"	// d3dContext writes D3DRS_FOGTABLEMODE = D3DFOG_LINEAR and never touches\n"
+"	// RANGEFOGENABLE, so the hardware fogs by DEPTH (eye-space z), per pixel --- hence\n"
+"	// the view-space z here and the ramp in the fragment shader.\n"
+"	v_fogDist = abs(viewPos.z);\n"
 "}\n"
 ;

@@ -152,9 +152,19 @@ glState::glState(void)
 	u_debug = uniformRegistry.Register("u_debug", UNIFORM_VEC4);
 	u_vertexFade = uniformRegistry.Register("u_vertexFade", UNIFORM_VEC4);
 	u_lit = uniformRegistry.Register("u_lit", UNIFORM_VEC4);
+	u_fogColour = uniformRegistry.Register("u_fogColour", UNIFORM_VEC4);
+	u_fogRange = uniformRegistry.Register("u_fogRange", UNIFORM_VEC4);
 	isLit = true;
+	isFogged = true;
 	vertexFade = Vector4(0.0f, 0.0f, 0.0f, 0.0f);
 	whiteTex = 0;
+
+	// pddiBaseContext::ResetState (SHR basecontext.cpp): off, white, 0..1000
+	fogEnabled = false;
+	fogColour = pddiColour(255, 255, 255);
+	fogStart = 0.0f;
+	fogEnd = 1000.0f;
+	fogClamp = 255;
 
 	// Until renderer::LightManager applies the game's own lights this is what the world
 	// is lit with: aap's eyeballed stand-in for the retail noon sun, which turned out to
@@ -193,6 +203,14 @@ glState::Flush(void)
 	uniformRegistry.SetUniform(u_vertexFade, &vertexFade);
 	Vector4 lit(isLit ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
 	uniformRegistry.SetUniform(u_lit, &lit);
+	// linear distance fog, exactly the two states d3dContext::SetFog/EnableFog write:
+	// the colour, and the start/end of the linear ramp. w of u_fogColour is the enable.
+	Vector4 fogc = convCol(fogColour);
+	fogc.w = fogEnabled && isFogged ? 1.0f : 0.0f;
+	uniformRegistry.SetUniform(u_fogColour, &fogc);
+	// z: the FogClamp as the shaders see it (c49.w), w: whether to apply it
+	Vector4 fogr(fogStart, fogEnd, fogClamp/255.0f, pddiDebug.fogClamp ? 1.0f : 0.0f);
+	uniformRegistry.SetUniform(u_fogRange, &fogr);
 	uniformRegistry.Flush();
 }
 

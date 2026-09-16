@@ -16,6 +16,7 @@ the reasoning behind them is in `re/notes/` (start with `displaylist.md`, then
 | `view.*` | `Camera`, `View_Get/SetRenderingCamera`, `View_Get/SetCullingCamera` | where we look from, and the frustum |
 | `worldgeo.*`, `zonepkg.*`, `instance.*`, `sky.*` | `WorldGeoRenderable`, `ZonePkgRenderable`, `InstanceRenderable`, `SkyRenderable` and their chunk loaders | the four renderable classes the viewer actually loads |
 | `lighting.*` | `LightingRenderable`, `SFLightGroupLoader`, `LightManager` | which of the game's own lights the frame is lit with |
+| `render_manager.*` | `FogParameters`, `EnvManager` | the distance fog, per time of day |
 
 * **`RenderManager`** is *not* a renderer. It owns 4 scenes, 2 canvases and (in retail) 12
   memory heaps, the time-of-day manager and the decal / skid-mark / tracer pools.
@@ -223,6 +224,36 @@ What is missing is `pure3d::LightsChooser`: retail reduces the world lights to f
 directional lights **per lit object**, so a lamp only outshines the sun for the car next to
 it. The viewer has one set per frame, chosen at the camera, and therefore keeps the zone
 lights in the first slots. `re/notes/lighting.md` §6 lists the rest.
+
+## Fog
+
+`EnvManager` is retail's environment manager (`RenderManager+0x1c`) reduced to its fog: six
+key frames at 4, 9, 12, 18, 21 and 24 h, each with a clear and a rainy `FogParameters`, and
+`Update()` interpolates them at `LightManager::timeOfDay` and pushes the result through
+`Canvas::SetFog` — exactly the path `View_SetFog` (`0x464e40`) takes in retail. The numbers
+are the game's own: the key hours come from the `TODObject` of `packages/z04/miami_lod.p3d`
+and the twelve `environment_{clear,rainy}_{hour}` objects from `scriptc/graphanims.cso`, so
+noon is fog from 25 to 900 m in `200,200,150` and 4 a.m. is 20 to 800 m in `23,28,40`.
+`re/notes/fog.md` has the whole table and how it was read out of the compiled script.
+
+`Canvas::ApplyFog` then does what `pure3d::View::BeginRender` does — `EnableFog`, `SetFog`,
+`SetFogClamp` — through the pddi fog API added in `pddi.h`. The retail fog is **linear, per
+pixel and by depth** (`d3dContext::SetFog` writes nothing but `FOGTABLEMODE = D3DFOG_LINEAR`,
+`FOGCOLOR`, `FOGSTART` and `FOGEND`, and never touches `RANGEFOGENABLE` or `FOGDENSITY`), so
+`gl/shaders/shader.frag` blends `mix(fogColour, colour, (end - z)/(end - start))` into the
+colour only, over the eye-space depth the vertex shader passes down. Everything is fogged,
+including the low-LOD skyline drawn with the vertex-fade shader; `Display_List` brackets the
+sky lists 46/47, the camera-locked list 76, the env/reflection lists 9/10, the night lights
+(11) and the decal lists 18/4/20/6 with `EnableFog(false)`, the same way and in the same
+places retail does.
+
+What retail calls the fog "density" is really `EnvironmentObject::FogClamp`: it is *not* a
+D3D state (`d3dContext` does not even override `SetFogClamp`), it only reaches the game's
+own vertex programs as `c49 = (start, end, 1.25/(start+end), clamp/255)`, and what they do
+with it is not reversed — so the viewer carries it to the shader but leaves it unapplied
+unless the View tab's checkbox says otherwise. The View tab's **Fog** header has the enable,
+the colour, the start and end and the "game values" switch (off = edit them by hand);
+`P3D_NOFOG=1` starts with the env manager out of the way.
 
 ## What is deliberately missing
 

@@ -504,6 +504,45 @@ LightingGUI(void)
 	ImGui::EndDisabled();
 }
 
+// ---------------------------------------------------------------- fog
+
+// The distance fog: renderer::EnvManager picks the game's own per-time-of-day values
+// (re/notes/fog.md), Canvas::SetFog holds them and Canvas::ApplyFog hands them to pddi.
+static void
+FogGUI(void)
+{
+	renderer::Canvas *cv = renderer::g_renderMgr ? renderer::g_renderMgr->canvas : nil;
+	renderer::EnvManager *env = renderer::gEnvManager;
+	if(cv == nil || env == nil)
+		return;
+	if(!ImGui::CollapsingHeader("Fog"))
+		return;
+
+	ImGui::Checkbox("fog", &cv->fogEnabled);
+	ImGui::SameLine();
+	ImGui::Checkbox("game values", &env->enabled);
+	ImGui::SameLine();
+	ImGui::TextDisabled("(the TODObject's six env params)");
+	ImGui::BeginDisabled(!cv->fogEnabled);
+	// the game values are pushed every frame, so editing them by hand needs the
+	// env manager out of the way
+	ImGui::BeginDisabled(env->enabled);
+	pddiColour col(cv->fogColour);
+	float c[3] = { col.R()/255.0f, col.G()/255.0f, col.B()/255.0f };
+	if(ImGui::ColorEdit3("colour", c))
+		cv->fogColour = pddiColour((u8)(c[0]*255.0f), (u8)(c[1]*255.0f),
+		                           (u8)(c[2]*255.0f), col.A()).c;
+	ImGui::DragFloat("start", &cv->fogStart, 1.0f, 0.0f, 5000.0f);
+	ImGui::DragFloat("end", &cv->fogEnd, 1.0f, 1.0f, 5000.0f);
+	ImGui::EndDisabled();
+	ImGui::Text("%d, %d, %d   alpha %d   clamp %d",
+	            col.R(), col.G(), col.B(), col.A(), cv->fogClamp);
+	// the alpha and the clamp do not reach any D3D state in retail; the clamp becomes
+	// c49.w of the game's own vertex programs (re/notes/fog.md)
+	ImGui::Checkbox("apply FogClamp as a fog cap (guess)", &pddiDebug.fogClamp);
+	ImGui::EndDisabled();
+}
+
 // ---------------------------------------------------------------- view tab
 
 
@@ -538,6 +577,7 @@ ViewTab(void)
 		ImGui::TreePop();
 	}
 	LightingGUI();
+	FogGUI();
 	ImGui::Separator();
 	StreamingGUI();
 }

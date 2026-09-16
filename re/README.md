@@ -133,6 +133,14 @@ Implemented in the repo from these notes (2026-09-15, renderer:: restructured 20
     The region/global libraries stay resident. View tab > Streaming shows the current triggers and the
     resident packages, with the delay and loads-per-frame knobs. P3D_STREAM=0 (or no streamgraph.p3d) loads
     the whole static list instead, as before.
+  - renderer/render_manager.* EnvManager + the pddi fog API: distance fog with the game's own
+    per-time-of-day values (notes/fog.md). The twelve environment_{clear,rainy}_{4,9,12,18,21,24}
+    EnvironmentObjects of scriptc/graphanims.cso and the TODObject of packages/z04/miami_lod.p3d;
+    linear per-pixel fog by eye-space depth, exactly the four D3D states d3dContext::SetFog writes,
+    off for the sky/camera-locked/night-light/decal lists as in retail. "FogDensity" never existed:
+    Canvas+0x24 is EnvironmentObject::FogClamp and reaches no D3D state at all.
+    notes/fog.md §1 also documents the .cso (compiled Torque script) format and the stx######## name
+    hashing, which makes every script in cement.rcf readable.
   - light.* + renderer/lighting.*: the map is lit with the game's own lights (notes/lighting.md).
     pure3d::Light (0x13000 + the DIRECTION/POSITION/CONE/SHADOW/DECAY_RANGE children), LightGroup
     (0x2380), the LITE time-of-day animation (0x121000, channels 'CLR\0'/'DIR\0' -- Scarface pads the
