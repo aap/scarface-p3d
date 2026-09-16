@@ -15,10 +15,10 @@ extern bool g_skyEnabled;
 
 // retail: g[0x008114ec], the time of day in milliseconds; SkyRenderable::Update turns it
 // into a 0..1 phase with g[0x737b00] == 1/86400000 and drives every frame controller of
-// the sky composite with it. We have no time-of-day manager, so this is a plain 0..1
-// value that P3D_TIMEOFDAY can set; the default is a clear daytime sky, because the
-// meshes' own vertex colours (phase 0) are the midnight set.
-extern float g_timeOfDay;
+// the sky composite with it. There is one clock for the whole renderer and the lights
+// already own it, so this reads renderer::LightManager::timeOfDay (hours, P3D_TIME;
+// P3D_TIMEOFDAY sets the same clock as a fraction of a day) and returns it as 0..1.
+float GetTimeOfDay(void);
 
 // retail: renderer::SkyRenderable : Renderable, vtable 0x007385e4, 0x98 bytes,
 // typeMask 1 (TYPE_SKY). Chunk 0x08800002 (re/notes/sky.md). Two of them live in

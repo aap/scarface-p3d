@@ -40,6 +40,8 @@ CompositeDrawable::CompositeDrawable(void)
 CompositeDrawable::~CompositeDrawable(void)
 {
 	CompositeDrawable::ReleaseShaderCallback();
+	for(u32 i = 0; i < frameControllers.size(); i++)
+		Release(frameControllers[i]);
 	Release(pose);
 	Release(primList);
 }
@@ -194,12 +196,24 @@ CompositeDrawableLoader::LoadObject(IRefCount **pObject, u32 *pUID, ChunkFile *f
 			f->GetString(childName);
 			u32 type = f->GetU32();
 			DrawableContainer *drawable = nil;
-			if(type & 1)
-				drawable = inventory->Find<Geometry>(childName);
-			else if(type & 8)
+			if(type & 1) {
+				Geometry *geo = inventory->Find<Geometry>(childName);
+				drawable = geo;
+				// retail collects the frame controllers of the elements into
+				// the composite's own list (+0x48); the sky's vertex colour
+				// animations live on the meshes
+				if(geo)
+					for(u32 k = 0; k < geo->GetFrameControllers().size(); k++)
+						composite->AddFrameController(geo->GetFrameControllers()[k]);
+			} else if(type & 8) {
 				// the sky's sun/flares/stars: chunk 0x00017006, registered
 				// under the group's name as a BillboardObject (billboard.cpp)
-				drawable = inventory->Find<BillboardObject>(childName);
+				BillboardObject *bb = inventory->Find<BillboardObject>(childName);
+				drawable = bb;
+				if(bb)
+					for(u32 k = 0; k < bb->frameControllers.size(); k++)
+						composite->AddFrameController(bb->frameControllers[k]);
+			}
 			// TODO: other types
 // need assert later
 //			assert(drawable);
@@ -220,7 +234,25 @@ if(drawable) {
 			break;
 		}
 
-		// TODO: 0x121201	frame controller
+		// the composite's own frame controller. The sky's is "PTRN_sky", a pose
+		// transform animation whose "sun_grp" joint carries the sun, its flares and
+		// the moon across the sky (re/notes/sky.md).
+		case Animation::FRAME_CONTROLLER: {
+			FrameControllerInfo info;
+			ReadFrameControllerInfo(f, &info);
+			if(info.type != Animation::TYPE_PTRN || skeleton == nil)
+				break;
+			Animation *anim = inventory->Find<Animation>(info.animName);
+			if(anim == nil)
+				break;
+			PoseAnimationController *ctrl = new PoseAnimationController;
+			ctrl->SetName(info.name);
+			ctrl->frameOffset = info.frameOffset;
+			ctrl->SetAnimation(anim);
+			ctrl->SetPose(composite->GetPose(), skeleton);
+			composite->AddFrameController(ctrl);
+			break;
+		}
 		}
 		f->EndChunk();
 	}

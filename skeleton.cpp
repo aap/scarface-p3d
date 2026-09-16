@@ -8,7 +8,7 @@ namespace pure3d
 using namespace math;
 
 Pose::Pose(Skeleton *skel)
- : skeleton(skel), updateCount(0), dirty1(true)
+ : skeleton(skel), updateCount(0), dirty1(true), dirty2(true)
 {
 	skeleton->AddRef();
 

@@ -109,18 +109,38 @@ version:
   z-write off, fog off, and **translated to the rendering camera's x and z** (y stays 0),
   so the sky turns with the camera but does not rise with it. Layer 28 is list **76**,
   drawn near the end, translated to the camera's *full* position — that is the sun, the
-  sun flares and the stars, which sit at infinity. Neither walk culls per node.
+  sun flares and the moon, which sit at infinity. Neither walk culls per node.
+* List 46 is sorted by `CmpKey`, descending, and its key is the drawable container's, out
+  of the mesh's `0x00122000` chunk: the dome 1.0, the two cloud layers 0.3/0.2, the
+  horizon gradient 0.0. Without that chunk everything is 0.5 and the dome paints over the
+  gradient — the whole sky is then one flat colour, which it is *not* meant to be (the
+  dome alone is: all 65 of its vertices carry the same colour).
 * `SkyRenderable::Update` is retail's throttle (every frame for the first second, then
-  every 15th) around one job: set every frame controller of the sky composite to
-  `numFrames * timeOfDay`. The only one we can drive is the sky boxes' vertex colour
-  animation, which is the one that matters — the meshes' own vertex colours are the
-  *night* sky and the animation adds the daylight back in. `renderer::g_timeOfDay` is
-  that 0..1 phase (`P3D_TIMEOFDAY`, default 0.25); `renderer::g_skyEnabled` is retail's
-  global on/off switch.
+  every 15th) around one job: set **every** frame controller of the sky composite to
+  `numFrames * phase`, then `Hide()`. There are three kinds (`re/notes/sky.md` §4):
+  `PTRN_sky`, a pose animation that turns the skeleton's `sun_grp` joint and carries the
+  sun, its two flare stars, the two lens flares and the moon across the sky; one `BQG_*`
+  per billboard quad group for their colour, size and visibility (the sun's six-key colour
+  curve, the moon's day/night visibility); and one `VRTX_*` per sky box mesh, picking the
+  vertex colour offset set. The `Hide()` matters: the pose moves the billboards and a
+  display list node caches the world matrix it was submitted with.
+* **The sun's rest pose is 755 m underground** — the whole day is `sun_grp`'s rotation, so
+  a viewer that does not play `PTRN_sky` draws the sun in the ground.
+* `renderer::GetTimeOfDay()` is the 0..1 phase, and it reads
+  `renderer::LightManager::timeOfDay` (hours): there is **one** clock, so `P3D_TIME=20`
+  gives an evening sky, an evening sun and evening light together. `P3D_TIMEOFDAY` still
+  works and sets the same clock as a fraction of a day. `renderer::g_skyEnabled` is
+  retail's global on/off switch.
 * The billboard quad groups themselves are `pure3d::` (`billboard.h`/`.cpp`, chunk
   `0x00017006`): a `BillboardObject` container whose single `BillboardQuadGroup`
   primitive builds all its quads into one triangle stream every time it is drawn, facing
-  the camera.
+  the camera. A `BillboardCutOffQuad` also runs `Calculate()` there, which evaluates the
+  `0x1700a`/`0x1700b` cones and fades the quad out as it leaves the middle of the screen.
+* `pure3d::Animation` and the frame controller family live in `anim.h`/`.cpp` (chunk
+  `0x00121000` with all nine channel types, and `0x00121201`); `light.*` keeps the
+  `LITE` controller, `billboard.*` the `BQG` one, `geometry.*` the `VRTX` one and `anim.*`
+  the `PTRN` one. The composite drawable collects the controllers of its elements into its
+  own list, which is retail's `CompositeDrawable +0x48`.
 
 ## The 84 lists
 
@@ -229,10 +249,9 @@ lights in the first slots. `re/notes/lighting.md` §6 lists the rest.
 No reflection pass, no occluders (`occlude::IsBoxVisible` is a hook that always says
 "visible"), no per-object light sets (see Lighting above), no stencil shadow volumes, no
 shader-mode extension (`ext(0x10b)`) and no hardware instancing — the eco props are drawn
-one placement at a time. The sky draws, but not everything on it moves: there are no frame
-controllers, so the sun's and the stars' `BillboardQuadGroupAnimationController` never runs,
-the cut-off cones that fade a flare out as you look away from it are parsed but not
-evaluated, and only the two ends of a primitive fade (0 and 1) are honoured, not the middle.
-The indoor/outdoor deferral of group (B) in `Render()` exists but
+one placement at a time. Only the two ends of a primitive fade (0 and 1) are honoured, not
+the middle. In the sky, the uv atlas animation of `0x00017008`, the `0x1700d` size scale
+of a cut-off quad and the occlusion query the sun flares use are still missing
+(`re/notes/sky.md` §6). The indoor/outdoor deferral of group (B) in `Render()` exists but
 `Display_List::cameraIndoors` is never set. `RenderManager::GetHeap` returns nil: there are
 no pools.

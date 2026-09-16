@@ -29,7 +29,36 @@ Geometry::Geometry(i32 nPrimGroup)
 
 Geometry::~Geometry(void)
 {
+	for(u32 i = 0; i < frameControllers.size(); i++)
+		Release(frameControllers[i]);
 	delete colourAnim;
+}
+
+
+VertexAnimationController::~VertexAnimationController(void)
+{
+}
+
+// NOT ref counted: the geometry owns the controller, so a reference back would be a cycle
+void
+VertexAnimationController::SetGeometry(Geometry *g)
+{
+	geometry = g;
+}
+
+// SHR: tVertexAnimController::Update --- the group id is the prim group index (always 0
+// in the sky) and the channel value is the morph key frame index.
+void
+VertexAnimationController::SetFrame(float frame)
+{
+	if(geometry == nil || animation == nil)
+		return;
+	frame = animation->MakeValidFrame(frame + frameOffset);
+	for(u32 i = 0; i < animation->groups.size(); i++) {
+		const Animation::Channel *c = animation->groups[i].Find(Animation::CHANNEL_VERTEX);
+		if(c)
+			geometry->SetColourAnimFrame(c->GetInt(frame));
+	}
 }
 
 void
@@ -177,6 +206,37 @@ GeometryLoader::LoadObject(IRefCount **pObject, u32 *pUID, content::ChunkFile *f
 			}
 			if(anim)
 				geo->SetColourAnim(anim);
+			break;
+		}
+
+		// the mesh's own frame controller, "VRTX_<mesh>" for the sky boxes. It has to
+		// come after the VERTEXANIM chunk, which it does in every file.
+		case Animation::FRAME_CONTROLLER: {
+			FrameControllerInfo info;
+			ReadFrameControllerInfo(f, &info);
+			if(info.type != Animation::TYPE_VRTX)
+				break;
+			Animation *anim = inventory->Find<Animation>(info.animName);
+			if(anim == nil)
+				break;
+			VertexAnimationController *ctrl = new VertexAnimationController;
+			ctrl->SetName(info.name);
+			ctrl->frameOffset = info.frameOffset;
+			ctrl->SetAnimation(anim);
+			ctrl->SetGeometry(geo);
+			geo->AddFrameController(ctrl);
+			break;
+		}
+
+		// retail: 0x0069ca7a. It is what puts the sky in the right order --- the dome
+		// is 1.0, the cloud layers 0.3 and 0.2, the horizon gradient 0.0, and list 46
+		// is sorted by CmpKey (descending), so the dome is painted first and the
+		// clouds and the gradient over it. Without it everything sits at the ctor's
+		// 0.5 and the dome can cover the lot (re/notes/sky.md).
+		case Geometry::SORTKEY: {
+			f->GetI32();			// version
+			float key = f->GetFloat();
+			geo->sortKey = key < 0.0f ? 0.0f : key > 1.0f ? 1.0f : key;
 			break;
 		}
 

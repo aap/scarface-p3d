@@ -30,6 +30,12 @@ public:
 	~Pose(void);
 
 	Matrix *GetMatrix(i32 i) { return &matrix[i]; }
+	Skeleton *GetSkeleton(void) { return skeleton; }
+	i32 GetNumJoints(void) { return numJoints; }
+	// the two the pose animation writes (SHR: tPose::Joint::objectMatrix); both make
+	// the pose dirty so that the next Evaluate rebuilds the whole matrix chain
+	void SetJointPosition(i32 i, const Vector &p) { position[i] = p; dirty1 = true; dirty2 = true; }
+	void SetJointRotation(i32 i, const Quaternion &q) { rotation[i] = q; dirty1 = true; dirty2 = true; }
 
 	virtual Vector *GetPosition(i32 i);
 	virtual void SetPosition(i32 i, Vector *pos);
@@ -66,6 +72,7 @@ public:
 	i32 GetNumJoints(void) { return numJoints; }
 	Quaternion *GetRotation(i32 i) { return &rotation[i]; }
 	Vector *GetPosition(i32 i) { return localMatrix[i].GetPosition(); }
+	u32 GetJointUID(i32 i) { return uid[i]; }
 	Matrix *GetLocalMatrix(i32 i) { return &localMatrix[i]; }
 	Matrix *GetWorldMatrix(i32 i) { return &worldMatrix[i]; }
 	void SetJointUID(i32 i, u32 UID) { uid[i] = UID; }

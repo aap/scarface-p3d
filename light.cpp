@@ -186,187 +186,58 @@ LightGroupLoader::LoadObject(IRefCount **pObject, u32 *pUID, ChunkFile *f, LoadI
 
 // ---------------------------------------------------------------- LITE animation
 
-// the channels are not sorted keys with a search structure, just an ascending frame list
-template <class KEY> static i32
-FindKey(const std::vector<KEY> &keys, float frame, float *t)
-{
-	i32 n = (i32)keys.size();
-	if(n == 0) return -1;
-	if(frame <= keys[0].frame) { *t = 0.0f; return 0; }
-	for(i32 i = 1; i < n; i++)
-		if(frame < keys[i].frame) {
-			float d = keys[i].frame - keys[i-1].frame;
-			*t = d > 0.0f ? (frame - keys[i-1].frame) / d : 0.0f;
-			return i-1;
-		}
-	*t = 0.0f;
-	return n-1;
-}
-
-bool
-LightAnimation::GetColour(float frame, pddiColour *out) const
-{
-	float t;
-	i32 i = FindKey(colourKeys, frame, &t);
-	if(i < 0) return false;
-	pddiColour a = colourKeys[i].colour;
-	pddiColour b = (i+1 < (i32)colourKeys.size()) ? colourKeys[i+1].colour : a;
-	*out = pddiColour((u8)(a.R() + (b.R() - a.R())*t),
-	                  (u8)(a.G() + (b.G() - a.G())*t),
-	                  (u8)(a.B() + (b.B() - a.B())*t),
-	                  (u8)(a.A() + (b.A() - a.A())*t));
-	return true;
-}
-
-bool
-LightAnimation::GetDirection(float frame, Vector *out) const
-{
-	float t;
-	i32 i = FindKey(dirKeys, frame, &t);
-	if(i < 0) return false;
-	Vector a = dirKeys[i].v;
-	Vector b = (i+1 < (i32)dirKeys.size()) ? dirKeys[i+1].v : a;
-	Vector v = a + (b - a)*t;
-	float len = Norm(v);
-	*out = len > 0.0f ? v/len : a;
-	return true;
-}
-
-// SHR: tChannelLoader::LoadColourChannel / LoadVectorChannel --- u32 version, u32 param,
-// u32 nKeys, u16 frames[nKeys], then the values
-void
-LightAnimationLoader::LoadObject(IRefCount **pObject, u32 *pUID, ChunkFile *f, LoadInventory *inventory)
-{
-	char name[256];
-
-	u32 version = f->GetU32();
-	f->GetString(name);
-	u32 animType = f->GetU32();
-	float numFrames = f->GetFloat();
-	float speed = f->GetFloat();
-	bool cyclic = f->GetU32() == 1;
-	// z04 has 1499 animations, of a dozen types; only the time-of-day ones are ours
-	if(animType != LightAnimation::TYPE_LITE)
-		return;
-
-	LightAnimation *anim = new LightAnimation;
-	anim->SetName(name);
-	anim->numFrames = numFrames;
-	anim->speed = speed;
-	anim->cyclic = cyclic;
-
-	while(f->ChunksRemaining()) {
-		if(f->BeginChunk() == LightAnimation::GROUP_LIST) {
-			u32 groupVersion = f->GetU32();
-			u32 numGroups = f->GetU32();
-			for(u32 g = 0; g < numGroups && f->ChunksRemaining(); g++) {
-				f->BeginChunk();	// GROUP
-				f->GetU32();		// version
-				f->GetString(name);
-				f->GetU32();		// group id
-				u32 numChannels = f->GetU32();
-				for(u32 c = 0; c < numChannels && f->ChunksRemaining(); c++) {
-					u32 id = f->BeginChunk();
-					if(id == LightAnimation::COLOUR) {
-						f->GetU32();	// version
-						u32 param = f->GetU32();
-						u32 n = f->GetU32();
-						std::vector<float> frames(n);
-						for(u32 k = 0; k < n; k++) frames[k] = f->GetU16();
-						for(u32 k = 0; k < n; k++) {
-							u32 col = f->GetU32();
-							LightAnimation::ColourKey key;
-							key.frame = frames[k];
-							key.colour = pddiColour((col>>16)&0xFF, (col>>8)&0xFF, col&0xFF, (col>>24)&0xFF);
-							if(param == LightAnimation::CHANNEL_COLOUR)
-								anim->colourKeys.push_back(key);
-						}
-					} else if(id == LightAnimation::VECTOR_3DOF) {
-						f->GetU32();	// version
-						u32 param = f->GetU32();
-						u32 n = f->GetU32();
-						std::vector<float> frames(n);
-						for(u32 k = 0; k < n; k++) frames[k] = f->GetU16();
-						for(u32 k = 0; k < n; k++) {
-							LightAnimation::VectorKey key;
-							key.frame = frames[k];
-							key.v.x = f->GetFloat();
-							key.v.y = f->GetFloat();
-							key.v.z = f->GetFloat();
-							if(param == LightAnimation::CHANNEL_DIR)
-								anim->dirKeys.push_back(key);
-						}
-					}
-					f->EndChunk();
-				}
-				f->EndChunk();
-			}
-		}
-		f->EndChunk();
-	}
-
-	if(getenv("P3D_VERBOSE"))
-		printf("light anim: %s %g frames %g fps, %d colour keys, %d dir keys\n",
-		       anim->GetName(), anim->numFrames, anim->speed,
-		       (int)anim->colourKeys.size(), (int)anim->dirKeys.size());
-
-	*pObject = anim;
-	*pUID = anim->GetUID();
-}
-
-
 LightAnimationController::~LightAnimationController(void)
 {
-	if(light) light->Release();
-	if(animation) animation->Release();
+	Release(light);
 }
 
-// retail/SHR: tLightAnimationController::UpdateNoBlending
+// retail/SHR: tLightAnimationController::UpdateNoBlending. A LITE animation has one group
+// per light; ours is bound to a single light, so group 0 is the one.
 void
 LightAnimationController::SetFrame(float frame)
 {
-	if(light == nil || animation == nil)
+	if(light == nil || animation == nil || animation->groups.empty())
 		return;
-	frame += frameOffset;
-	pddiColour col;
-	if(animation->GetColour(frame, &col))
-		light->colour = col;
-	Vector dir;
-	if(animation->GetDirection(frame, &dir))
-		light->direction = dir;
+	frame = animation->MakeValidFrame(frame + frameOffset);
+	const Animation::Group *group = &animation->groups[0];
+	if(const Animation::Channel *c = group->Find(Animation::CHANNEL_COLOUR)) {
+		// the channel hands out the file's D3DCOLOR; a light colour goes to the shader
+		// as a uniform, which wants red in the low byte --- the same swap LightLoader
+		// does on the 0x13000 colour word
+		u32 col = c->GetColour(frame).c;
+		light->colour = pddiColour((col>>16)&0xFF, (col>>8)&0xFF, col&0xFF, (col>>24)&0xFF);
+	}
+	if(const Animation::Channel *c = group->Find(Animation::CHANNEL_DIR)) {
+		Vector dir = c->GetVector(frame);
+		float len = Norm(dir);
+		if(len > 0.0f)
+			light->direction = dir/len;
+	}
+	if(const Animation::Channel *c = group->Find(Animation::CHANNEL_ENABLE))
+		light->enabled = c->GetBool(frame);
 }
 
-// The Scarface frame-controller chunk 0x00121201 (version 1): pstring name, u32 type
-// ('LITE'), u32 'ANIM', float frameOffset, u32 (always 1), pstring target, pstring
-// animation. SHR's 0x121200 is the same without the 'ANIM' word and the trailing u32.
+// The standalone 0x00121201 chunks; only the 'LITE' ones have a target we can resolve
+// out of the inventory (a nested controller's target is still being built by its parent).
 void
 FrameControllerLoader::LoadObject(IRefCount **pObject, u32 *pUID, ChunkFile *f, LoadInventory *inventory)
 {
-	char name[256], target[256], animName[256];
-
-	u32 version = f->GetU32();
-	f->GetString(name);
-	u32 type = f->GetU32();
-	if(type != LightAnimation::TYPE_LITE)
+	FrameControllerInfo info;
+	ReadFrameControllerInfo(f, &info);
+	if(info.type != Animation::TYPE_LITE)
 		return;
-	f->GetU32();		// 'ANIM'
-	float frameOffset = f->GetFloat();
-	f->GetU32();		// always 1
-	f->GetString(target);
-	f->GetString(animName);
 
-	Light *light = inventory->Find<Light>(target);
-	LightAnimation *anim = inventory->Find<LightAnimation>(animName);
+	Light *light = inventory->Find<Light>(info.target);
+	Animation *anim = inventory->Find<Animation>(info.animName);
 	if(light == nil || anim == nil)
 		return;
 
 	LightAnimationController *ctrl = new LightAnimationController;
-	ctrl->SetName(name);
-	ctrl->frameOffset = frameOffset;
+	ctrl->SetName(info.name);
+	ctrl->frameOffset = info.frameOffset;
 	light->AddRef();
 	ctrl->light = light;
-	anim->AddRef();
-	ctrl->animation = anim;
+	ctrl->SetAnimation(anim);
 
 	*pObject = ctrl;
 	*pUID = ctrl->GetUID();

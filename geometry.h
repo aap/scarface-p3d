@@ -4,6 +4,9 @@
 #include "drawable.h"
 #include "primgroup.h"
 #include "loadmanager.h"
+#include "anim.h"
+
+#include <vector>
 
 namespace pure3d
 {
@@ -37,7 +40,9 @@ class Geometry : public DrawableContainer
 	// TODO: unknowns
 	bool isFading;
 	float fadeAmount;
-	// frame controller
+	// the mesh's own 0x00121201 frame controllers (the sky's "VRTX_<mesh>Shape" ones);
+	// the composite drawable copies them into its own list at load time
+	std::vector<FrameController*> frameControllers;
 	VertexColourAnim *colourAnim;
 public:
 	enum {
@@ -84,6 +89,10 @@ public:
 		VERTEXANIM		= 0x121305,
 		VERTEXANIMFRAME		= 0x121306,
 		VERTEXANIMDATA		= 0x10F02,
+
+		// { u32 version; float key; } --- the container sort key, clamped to [0,1]
+		// (retail GeometryLoader::LoadObject 0x0069ca7a, stored at container +0x3c)
+		SORTKEY			= 0x122000,
 	};
 
 	CLASSNAME(Geometry)
@@ -103,6 +112,26 @@ public:
 	// the result into the first prim group's vertex buffer. retail does the same thing
 	// through a frame controller (re/notes/sky.md).
 	void SetColourAnimFrame(float frame);
+
+	std::vector<FrameController*> &GetFrameControllers(void) { return frameControllers; }
+	void AddFrameController(FrameController *fc) { fc->AddRef(); frameControllers.push_back(fc); }
+};
+
+// retail/SHR: pure3d::VertexAnimController (SHR tVertexAnimController,
+// p3d/anim/vertexanimcontroller.cpp). A 'VRTX' animation with one INT channel, also
+// tagged 'VRTX', whose value is the INDEX of the morph key frame; SHR has an entity
+// channel of keys there and blends between the two bracketing ones, which is what the
+// fractional part of our sampled index does.
+class VertexAnimationController : public FrameController
+{
+	Geometry *geometry;
+public:
+	CLASSNAME(VertexAnimationController);
+	VertexAnimationController(void) : geometry(nil) {}
+	~VertexAnimationController(void);
+
+	void SetGeometry(Geometry *g);
+	virtual void SetFrame(float frame);
 };
 
 class GeometryLoader : public SimpleChunkHandler
