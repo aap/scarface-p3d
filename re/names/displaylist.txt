@@ -1,0 +1,214 @@
+# renderer::Display_List translation unit (PC retail, unpacked-image VAs)
+# Derived 2026-09-16, see re/notes/displaylist.md.  Lines "<addr> <name>".
+# A trailing " ?" marks a guess; everything else was read out of the disassembly.
+#
+# ---------------------------------------------------------------------------
+# struct renderer::Display_List : pure3d::Entity     vtable 0x00737738
+#   ctor 0x0045f110(int nodeCount), dtor 0x0045d9a0, size >= 0xcc
+#   0x00  void*                    vtable            (Entity base spans 0x00..0x2f)
+#   0x30  LinkedList*              lists             malloc(0x3f0) == 84 * 12
+#   0x34  LinkedList*              listsEnd          lists + 0x3f0
+#   0x3c  u8                       listDirty[84]     0x3c..0x8f; set by AddContainerElement,
+#                                                    cleared by SortAllLists after sorting
+#   0x90  LinkedList               freeList          {head, tail, count}
+#   0x9c  Node*                    nodeStore         one flat array, nodeCount * 0x70
+#   0xa0  Node*                    nodeStoreEnd
+#   0xa4  u32                      pad?              ?
+#   0xa8  bool                     unknownA8         ctor: 0                                 ?
+#   0xa9  bool                     doPostProcess     ctor: 1; gates the ext(0x103) tail      ?
+#   0xaa  bool                     cameraInsideVolume  recomputed at the top of SortAllLists ?
+#   0xac  pure3d::ShadowGenerator  shadowGen         embedded, vtable 0x00737718
+#   0xc4  void*                    lightCache        0x20-byte obj + 0x60-byte member        ?
+#   0xc8  u32                      shadowVolumeColour  0xff191919, used by RenderShadowVolumes
+#
+# ---------------------------------------------------------------------------
+# struct renderer::Display_List::Node                stride 0x70 (112 bytes)
+#   0x00  ListLink                 link              {next, prev}; in lists[id] or freeList
+#   0x08  math::Matrix             matrix            world matrix captured at submit time
+#   0x48  float                    sortKey           container->+0x3c, or 0.0f/0.5f/1.0f per layer
+#   0x4c  float                    sortKey2          view-space z, written by ComputeDepthKeys
+#   0x50  pure3d::PrimArrayEntry*  elem              &container->elements[idx]  (16-byte stride)
+#   0x54  pure3d::DrawableContainer* container
+#   0x58  pure3d::Shader*          shader            elem->prim->GetShader(); the batching key
+#   0x5c  renderer::DisplayListPrimitive* parent     0 == orphan, recycled by FreeOrphanNodes
+#   0x60  LinkedList*              myList            &lists[listID]
+#   0x64  ListLink                 linkParent        {next, prev}; in parent->children
+#   0x6c  Node*                    self              == this; lets linkParent walk back to the node
+#
+# ---------------------------------------------------------------------------
+# struct renderer::DisplayListPrimitive : GameDrawableInfo   vtable 0x00737704, size 0x20
+#   ctor 0x00458c60, dtor 0x00458cc0
+#   0x00  void*                    vtable            {AddRef, Release, GetRef, dtor}
+#   0x04  u32                      unknown04         zeroed by ctor, NOT copied by the copy ctor ?
+#   0x08  renderer::Renderable*    owner             copied by operator=; read via node->parent
+#   0x0c  pure3d::DrawableHierarchy* drawable        ref-counted
+#   0x10  LinkedList               children          of Node::linkParent
+#   0x1c  u8                       flags             1 = visible, 2 = inList, 4 = flag4
+#
+# ---------------------------------------------------------------------------
+# struct LinkedList  (0x006e89e0 Remove / 0x006e8970 Insert / 0x006e8a20 Sort)
+#   0x00  void*  head
+#   0x04  void*  tail
+#   0x08  int    count
+#   links are {next at +0, prev at +4}; Insert pushes at the HEAD
+#
+# ---------------------------------------------------------------------------
+# NOTE: pddiRenderContext (== the "matrix stack" at g[0x00831688], a wrapper whose +0 is the
+# context) matrix slots, correcting notes/renderspine.md:
+#   +0x3c IdentityMatrix  +0x40 LoadMatrix  +0x44 PushMatrix  +0x48 PopMatrix
+#   +0x4c MultMatrix (NOT Load)  +0x50 GetMatrix
+#   +0x5c PushIdentityMatrix  +0x60 PushLoadMatrix  +0x64 PushMultMatrix
+# and state slots:
+#   +0x18 SetClearColour  +0x30 Clear  +0xf8 SetCullMode  +0x100 SetColourWrite(r,g,b,a)
+#   +0x108 EnableZBuffer  +0x118 SetZWrite  +0x120 EnableStencilBuffer  +0x128 SetStencilCompare
+#   +0x130 SetStencilRef  +0x148 SetStencilOp  +0x158 EnableFog  +0x15c IsFogEnabled
+#   +0x190 GetExtension  +0x1bc d3dContext::SetClearUsesQuad ?
+# ---------------------------------------------------------------------------
+
+# ---- Display_List lifetime -------------------------------------------------
+0045f110 renderer::Display_List::Display_List
+0045d9a0 renderer::Display_List::~Display_List
+0045f370 renderer::Display_List::ScalarDeletingDtor
+00458a90 renderer::Display_List::AllocNodeStore ?
+0045b200 renderer::Display_List::InitNodeStore ?
+004589d0 renderer::SetGlobalDisplayList
+00458a80 renderer::GetDetailScale ?
+
+# ---- DisplayListPrimitive --------------------------------------------------
+00458c60 renderer::DisplayListPrimitive::DisplayListPrimitive
+00458cc0 renderer::DisplayListPrimitive::~DisplayListPrimitive
+00458d30 renderer::DisplayListPrimitive::DisplayListPrimitive_copy
+00458de0 renderer::DisplayListPrimitive::operator=
+00458e50 renderer::DisplayListPrimitive::SetDrawable
+00458ea0 renderer::DisplayListPrimitive::RemoveFromList
+# NOTE: notes/renderspine.md calls 0x458f00 "SetVisible". It is not: 0x458ec0 only sets the
+# visible bit and withdraws (callers Renderable::SetVisible 0x473c68, WorldGeoRenderable 0x471599),
+# 0x458f00 also SUBMITS (callers Renderable::Display 0x47458a/0x474605). This matches the split
+# aap already has in renderer/renderable.cpp.
+00458ec0 renderer::DisplayListPrimitive::SetVisible
+00458f00 renderer::DisplayListPrimitive::Display
+
+# ---- submission / node management -----------------------------------------
+0045d360 renderer::Display_List::AddContainer
+0045d3b0 renderer::Display_List::AddContainerElement
+00458a20 renderer::Display_List::RemovePrimitiveNodes
+0045b0c0 renderer::Display_List::FreeOrphanNodes
+0045b110 renderer::Display_List::IsNodeVisible
+
+# ---- culling helpers -------------------------------------------------------
+00458b20 occlude::Plane::BoxInside ?
+00458ba0 occlude::Occluder::TestBox
+00458bf0 occlude::IsBoxVisible
+
+# ---- shader predicates -----------------------------------------------------
+00458ae0 pure3d::Shader::IsSortedBlendMode ?
+00458b00 pure3d::Shader::IsModulateBlendMode ?
+
+# ---- sorting ---------------------------------------------------------------
+0045ad10 renderer::Display_List::SortAllLists
+00459120 renderer::Display_List::ComputeDepthKeys
+004591e0 renderer::Display_List::ComputeDepthKeysList66
+004589e0 renderer::Display_List::CmpKey
+00458ff0 renderer::Display_List::CmpKeyThenDepth
+00459060 renderer::Display_List::CmpShader
+00459090 renderer::Display_List::CmpKeyThenMaterial
+00459260 renderer::Display_List::SortGroup_30_39_24
+004592c0 renderer::Display_List::SortGroup_4_3_18_17_75
+00459350 renderer::Display_List::SortGroup_5_6_19_20
+004593c0 renderer::Display_List::SortGroup_78_80_79_81
+00459460 renderer::Display_List::SortGroup_29_50
+004594b0 renderer::Display_List::SortGroup_37_38
+00459500 renderer::Display_List::SortGroup_7_8_77
+00459560 renderer::Display_List::SortGroup_Buildings
+004596f0 renderer::Display_List::SortGroup_52_53_56_55
+00459780 renderer::Display_List::SortGroup_36_41_42_45
+
+# ---- the frame ------------------------------------------------------------
+0045e680 renderer::Display_List::Render
+0045bb90 renderer::Display_List::RenderReflection
+00459910 renderer::Display_List::RenderList
+
+# ---- per-list renderers (lists they walk in the name) ----------------------
+00459a00 renderer::Display_List::RenderSky
+0045d140 renderer::Display_List::RenderLowLOD59
+0045ccd0 renderer::Display_List::RenderUnlitBlendAndLayered_36_42
+0045a680 renderer::Display_List::RenderInstanced73
+0045c800 renderer::Display_List::RenderOpaqueBuildings_21_27_28_35_43
+0045c070 renderer::Display_List::RenderCbvAlphaTest_26_22
+0045a620 renderer::Display_List::RenderInstanced74
+0045dcf0 renderer::Display_List::RenderEnv_9_10
+0045deb0 renderer::Display_List::RenderSpecular_13_15
+0045ac10 renderer::Display_List::RenderUnderwater_78_79
+0045b590 renderer::Display_List::RenderDecals_3_17_18_4_75
+0045cfb0 renderer::Display_List::RenderInteriorFloors_33_34
+0045bce0 renderer::Display_List::RenderProjectedShadows62
+0045caf0 renderer::Display_List::RenderShadowDecals_7_8_77
+0045aa50 renderer::Display_List::RenderLightSet67
+0045a890 renderer::Display_List::RenderLightSet69
+0045a770 renderer::Display_List::RenderLightSet82
+00459be0 renderer::Display_List::RenderDepthOnly58
+0045d1f0 renderer::Display_List::RenderVertexFade2
+0045e030 renderer::Display_List::RenderSpecularFading_14_16
+0045b870 renderer::Display_List::RenderDecalsFading_5_19_20_6
+0045db80 renderer::Display_List::RenderNightLights11
+0045a4c0 renderer::Display_List::RenderInstanced72
+0045e240 renderer::Display_List::RenderFadingBlend_44_25_32_31_40
+0045ac90 renderer::Display_List::RenderUnderwaterFading_80_81
+0045c280 renderer::Display_List::RenderCbvDefault23
+0045bf30 renderer::Display_List::RenderLit_29_50
+0045da30 renderer::Display_List::RenderCardsNight12
+0045ab20 renderer::Display_List::RenderLightSet68
+0045a7f0 renderer::Display_List::RenderLightSet83
+0045a910 renderer::Display_List::RenderLightSet71
+0045a010 renderer::Display_List::RenderShadowVolumes_61_63_64
+0045b240 renderer::Display_List::RenderSpecularPass2_15_13
+0045ce00 renderer::Display_List::RenderFading_41_45
+0045c3c0 renderer::Display_List::RenderUnlit_38_37
+0045c590 renderer::Display_List::RenderAdditive_39_30_24
+00459c80 renderer::Display_List::RenderWater65
+0045a9b0 renderer::Display_List::RenderLightSet70
+00459f70 renderer::Display_List::RenderWaterSurface66
+00459810 renderer::Display_List::RenderCameraLocked76
+
+# ---- outside the TU, but named here because this TU is the only caller -----
+006e8970 LinkedList::Insert
+006e89e0 LinkedList::Remove
+006e8a20 LinkedList::Sort
+00683dc0 pure3d::MultTranslationMatrix ?
+006610f0 math::Matrix::TransformPoint
+0045fad0 renderer::TestInteriorVolumes ?
+0045fb30 renderer::SelectLightSet ?
+004636f0 renderer::GetPlayerShadowSlot ?
+00469e40 renderer::EnvManager::GetColourA ?
+00469e70 renderer::EnvManager::GetColourB ?
+0046b930 renderer::EnvManager::BindLights ?
+00461270 occlude::Build ?
+# 00461ac0 renderer::View_GetRenderingCamera   -- named in names/rendercore.txt; g[0x8111d8],
+#          the camera SortAllLists and RenderCameraLocked76 use (NOT 0x461ad0, the cull camera)
+0064be30 pure3d::d3dContext::GetExtension
+0064b8d0 pure3d::d3dContext::SetColourWrite
+0064b990 pure3d::d3dContext::SetZWrite
+0064b9f0 pure3d::d3dContext::EnableStencilBuffer
+0064ba20 pure3d::d3dContext::SetStencilCompare
+0064ba50 pure3d::d3dContext::SetStencilRef
+0064bae0 pure3d::d3dContext::SetStencilOp
+0064bb80 pure3d::d3dContext::EnableFog
+006503a0 pure3d::d3dContext::SetCullMode
+0064b8c0 pure3d::d3dContext::SetClearUsesQuad ?
+0064ff10 pure3d::d3dContext::Clear
+00658e90 pure3d::pddiBaseContext::SetClearColour
+00658ea0 pure3d::pddiBaseContext::GetClearColour
+00658ec0 pure3d::pddiBaseContext::SetClearDepth
+00658ed0 pure3d::pddiBaseContext::GetClearDepth
+00658ee0 pure3d::pddiBaseContext::SetClearStencil
+00658ef0 pure3d::pddiBaseContext::GetClearStencil
+00658f00 pure3d::pddiBaseContext::IdentityMatrix
+00658f30 pure3d::pddiBaseContext::LoadMatrix
+00659fe0 pure3d::pddiBaseContext::PushMatrix
+0065a010 pure3d::pddiBaseContext::PopMatrix
+00658f70 pure3d::pddiBaseContext::MultMatrix
+0065a030 pure3d::pddiBaseContext::GetMatrix
+0065a050 pure3d::pddiBaseContext::PushIdentityMatrix
+0065a0b0 pure3d::pddiBaseContext::PushLoadMatrix
+0065a110 pure3d::pddiBaseContext::PushMultMatrix
+00659d40 pure3d::pddiBaseContext::IsFogEnabled

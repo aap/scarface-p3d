@@ -1,0 +1,459 @@
+# renderer:: core — RenderManager / Scene / Canvas / RenderFlowClient / Renderable /
+# RenderableHandle / the flat facade / cameras / occluders / light manager.
+# PC retail, unpacked-image VAs.  See re/notes/rendercore.md.
+# Names ending in " ?" are guesses; everything else was read out of the disassembly.
+# Function names in the facade come from the leaked game source
+# (grep -rhoE 'renderer::[A-Za-z_]+' /u/aap/lib/pure3d/scarface_src).
+# Class names come from the retail MSVC RTTI records (??_R4<Class>@renderer@@6B@).
+
+# ============================================================ struct layouts
+
+# renderer::RenderManager     0x104 bytes, vtable 0x007379b8 (2 slots), ctor 0x467a00
+#   0x00  void**                 vtable
+#   0x04  renderer::Scene**      scenes            // 4 entries
+#   0x08  renderer::Scene**      scenesEnd
+#   0x0c  u32                    spare
+#   0x10  renderer::Canvas*      canvas
+#   0x14  renderer::Canvas*      canvas2
+#   0x18  bool                   initialised
+#   0x19  bool                   skyEnabled
+#   0x1a  bool                   flag1a ?
+#   0x1c  renderer::EnvManager*  env ?             // 0xc44 bytes, ctor 0x46bd80
+#   0x20  renderer::DecalSystem* decalSystem ?     // 0x58 bytes, ctor 0x457800
+#   0x24  void*                  indoorExtraPass ?
+#   0x28  renderer::Renderable*  sky
+#   0x2c  renderer::Renderable*  sky2
+#   0x30  renderer::DecalRenderable*     decals
+#   0x34  renderer::SkidmarkRenderable*  skidmarks
+#   0x38  renderer::TraceFireRenderable* tracers
+#   0x3c  renderer::Renderable*  mainCharacter
+#   0x40  bool                   smallRenderBuffer ?
+#   0x41  bool                   videoModeApplied ?
+#   0x44  u32                    unused
+#   0x48  HeapInfo               heaps[12]         // stride 0x10
+
+# renderer::RenderManager::HeapInfo   0x10 bytes
+#   0x00  core::MemoryAllocator  allocator
+#   0x04  Heap*                  heap              // GetHeap() returns this
+#   0x08  u32                    numItems
+#   0x0c  u32                    spare
+# heap ids: 0 Vehicle 1 SmallStateProp 2 MediumStateProp 3 (unused) 4 Instance
+#           5 ParticleEffect 6 BuildingShadow 7 Shadow 8 Decal 9 Wake
+#           10 RenderableHandle 11 Empty
+
+# renderer::Scene             0x1c bytes, vtable 0x00737a80, ctor 0x468ed0(index, capacity)
+#   0x00  void**                 vtable
+#   0x04  renderer::Renderable** slots
+#   0x08  renderer::Renderable** slotsEnd
+#   0x0c  u32                    spare
+#   0x10  bool                   enabled
+#   0x14  i32                    index             // copied into Renderable+0x7c
+#   0x18  u32                    typeMaskFilter
+
+# renderer::GamePlayScene : Scene  0x24 bytes, vtable 0x00737a9c, ctor 0x468f90(index, cap, dlNodes)
+#   0x1c  float                     sortBias ?     // -0.0f
+#   0x20  renderer::Display_List*   displayList    // also published to g_displayList 0x8108a0
+
+# renderer::Canvas            0x38 bytes, vtable 0x007376e8 (1 slot), ctor 0x458210
+#   0x00  void**                 vtable
+#   0x04  pure3d::View*          view              // 0x150 bytes, ctor 0x67e330
+#   0x08  pure3d::Camera*        camera
+#   0x0c  bool                   enabled
+#   0x10  u32                    backgroundColour  // 0xff191919
+#   0x14  float                  fogFadeTimeLeft
+#   0x18  u32                    fogColour         // 0xff808080
+#   0x1c  float                  fogStart          // 100.0f
+#   0x20  float                  fogEnd            // 1000.0f
+#   0x24  i32                    fogDensity        // 200
+#   0x28  u32                    fogColourTo
+#   0x2c  float                  fogStartTo
+#   0x30  float                  fogEndTo
+#   0x34  i32                    fogDensityTo
+
+# renderer::RenderFlowClient  vtable 0x0073782c, ctor 0x465520, dtor 0x464c80
+#   0x00  void**                 vtable            // slot 2 = OnFrame
+
+# renderer::Renderable : pure3d::Entity   0x84 base, vtable 0x0073838c (16 slots), ctor 0x474ba0
+#   0x00  void**                 vtable
+#   0x04  i32                    refCount
+#   0x08  u32                    entityField
+#   0x0c  u32                    zero
+#   0x10  renderer::Room*        room
+#   0x14  math::Matrix           matrix            // 0x40; row3 at +0x44 = position
+#   0x54  i32                    typeMask
+#   0x58  DisplayListElement*    elements
+#   0x5c  DisplayListElement*    elementsEnd       // stride 0x30
+#   0x60  u32                    capacity
+#   0x64  u32                    uniqueId          // generation counter for handles
+#   0x68  float                  fadeRate          // UpdateFade steps by 1000/fadeRate per second
+#   0x6c  float                  fade              // 0 = opaque, 1 = gone
+#   0x70  float                  fade2
+#   0x74  float                  fadeTarget
+#   0x78  float                  timeSinceDrawn
+#   0x7c  i32                    sceneIndex
+#   0x80  u8                     flags80
+#          0x01 doDistanceTest  0x02 doFade   0x04 fadeDirectionOut  0x08 hasHandle
+#          0x10 isVisible       0x20 statePropFitsInPool
+#          0x40 shareLastElementFarDist        0x80 useBoxBoundsFromPose
+#   0x81  u8                     flags81
+#          0x01 isInsideRoom    0x02 matrixDirty
+
+# renderer::DisplayListElement  0x30 bytes
+#   0x00  float                  drawDistMin
+#   0x04  float                  drawDistMax
+#   0x08  float                  drawDistFade
+#   0x0c  DisplayListPrimitive   prim              // 0x20
+#   0x2c  bool                   isFading
+
+# renderer::RenderableHandle   0x0c bytes, vtable 0x0073781c (1 slot)
+#   0x00  void**                 vtable
+#   0x04  renderer::Renderable*  renderable
+#   0x08  u32                    uid               // snapshot of renderable->uniqueId
+# renderer::SkidMarksHandle : RenderableHandle   vtable 0x00737824, ctor 0x461980
+#   0x0c  u32                    id                // g[0x8111f4]++
+#   0x10  <subobject>                              // ctor 0x476120, dtor 0x476230
+# renderer::DecalsHandle    : RenderableHandle   vtable 0x007378a0, ctor 0x464690  (id g[0x8111f8])
+# renderer::TraceFireHandle : RenderableHandle   vtable 0x007378a8, ctor 0x4647b0  (id g[0x8111fc])
+
+# occlude::Occluder : pure3d::Entity   0x70 bytes, vtable 0x007377c8
+#   0x0c  math::Vector           boundsMin
+#   0x18  math::Vector           boundsMax
+#   0x24  float                  yaw
+#   0x28  bool                   isBoxOccluder
+#   0x29  bool                   isTypeOne ?
+#   0x2c  math::Box              box
+#   0x68  bool                   flag68 ?
+#   0x6c  i32                    id                // -1
+
+# occlude::OccluderInstance   0x98 bytes, array at 0x00810d10, count g[0x00810d04]
+#   0x00  math::Plane            planes[9]
+#   0x90  u32                    numPlanes
+#   0x94  occlude::Occluder*     occluder
+
+# renderer::LightManager   0x70 bytes, singleton g[0x008111cc], ctor 0x460600
+#   0x28  renderer::Room**       rooms
+#   0x2c  renderer::Room**       roomsEnd
+#   0x38  TemplateLight**        lights            // 0x100 slots
+#   0x6c  renderer::Room*        defaultRoom
+# renderer::LightManager::TemplateLight
+#   0x00  math::Matrix           transform
+#   0x40  u32                    templateId
+#   0x44  bool                   flag
+#   0x45  bool                   inUse
+
+# ============================================================ globals
+
+008108a0 renderer::g_displayList
+00810cdc occlude::g_statSpheresTested
+00810ce0 occlude::g_statCulled
+00810ce8 occlude::g_statOccluderTests
+00810cf0 occlude::g_statPlaneTests
+00810cfc occlude::g_occlusionEnabled
+00810d04 occlude::g_numOccluders
+00810d10 occlude::g_occluders
+008110a0 occlude::g_occluderNameCounter
+008110a4 renderer::g_handlesCreated
+008110a8 renderer::g_handlesDestroyed
+008110ac renderer::g_handlesLive
+008110b0 renderer::g_colourEffectsEnabled
+008110b4 renderer::g_destroyQueueCount
+008110b8 renderer::g_destroyQueueCapacity
+008110bc renderer::g_destroyQueue
+008110c0 renderer::g_screenShotName ?
+008111c8 renderer::g_renderAllocator
+008111cc renderer::gLightManager
+008111d0 renderer::g_renderMgr
+008111d4 renderer::g_defaultCamera
+008111d8 renderer::g_renderCamera
+008111dc renderer::g_cullCamera
+008111e8 renderer::g_frameTimeAccum ?
+008111ec renderer::g_renderFlowClient
+008111f4 renderer::g_skidMarksHandleId
+008111f8 renderer::g_decalsHandleId
+008111fc renderer::g_traceFireHandleId
+00811200 renderer::g_buildingShadowHeap
+00811204 renderer::g_particleEffectHeap
+00811208 renderer::g_renderMgr2
+008113f4 renderer::g_renderableUniqueId
+008114f0 renderer::g_smallStatePropSize
+008114f4 renderer::g_mediumStatePropSize
+00811504 renderer::g_vehicleBlockSize
+
+# ============================================================ RenderManager
+
+00467a00 renderer::RenderManager::RenderManager
+00468470 renderer::RenderManager::__scalar_deleting_dtor
+00468490 renderer::RenderManager::Init
+00467810 renderer::RenderManager::Update
+004689a0 renderer::RenderManager::Render
+004675b0 renderer::RenderManager::GetHeap
+004676b0 renderer::RenderManager::InitHeapTable
+004676e0 renderer::RenderManager::DumpHeap ?
+00467700 renderer::RenderManager::PurgeHeap ?
+004675c0 renderer::RenderManager::EnableSky
+00467950 renderer::RenderManager::SetSky
+00467610 renderer::RenderManager::EnableSmallRenderBuffer ?
+00467650 renderer::RenderManager::ApplyVideoMode ?
+004676a0 renderer::RenderManager::SetFlag1a ?
+
+# ============================================================ Scene / GamePlayScene
+
+00468ed0 renderer::Scene::Scene
+00468dd0 renderer::Scene::~Scene
+00468f70 renderer::Scene::__scalar_deleting_dtor
+00468ac0 renderer::Scene::AddRenderable
+00468b20 renderer::Scene::RemoveRenderable
+00468b80 renderer::Scene::Render
+00468c00 renderer::Scene::Update
+00468a70 renderer::Scene::EnableTypes
+00468d60 renderer::Scene::AllocSlots
+00468f90 renderer::GamePlayScene::GamePlayScene
+00468e60 renderer::GamePlayScene::~GamePlayScene
+00469050 renderer::GamePlayScene::__scalar_deleting_dtor
+00468cc0 renderer::GamePlayScene::AddRenderable
+00468d10 renderer::GamePlayScene::RemoveRenderable
+00468aa0 renderer::GamePlayScene::Render
+00468c50 renderer::GamePlayScene::Update
+00468a90 renderer::GamePlayScene::SetName
+004589d0 renderer::SetGlobalDisplayList
+
+# ============================================================ Canvas
+
+00458210 renderer::Canvas::Canvas
+00458640 renderer::Canvas::__scalar_deleting_dtor
+00458620 renderer::Canvas::RenderScene
+00458390 renderer::Canvas::UpdateFog
+00458300 renderer::Canvas::SetFog
+004582e0 renderer::Canvas::SetBackgroundColour
+004582f0 renderer::Canvas::SetClearColour ?
+00458690 renderer::Canvas::ReadDisplaySettings ?
+004581f0 renderer::Canvas::RenderSceneIfEnabled ?
+00458080 renderer::DecalSystem::SetShader ?
+004580d0 renderer::View_ApplyColourEffectsExt ?
+00458110 renderer::View_ApplyDepthOfFieldExt ?
+004581b0 renderer::View_EnableColourEffectsExt ?
+004581d0 renderer::View_DisableColourEffectsExt ?
+00458540 renderer::View_SetColourEffectsExt ?
+004585a0 renderer::View_SetEnvExt ?
+
+# ============================================================ RenderFlowClient / init
+
+004673c0 renderer::CreateRenderFlowClient
+00465520 renderer::RenderFlowClient::RenderFlowClient
+00464c80 renderer::RenderFlowClient::__scalar_deleting_dtor
+00465590 renderer::RenderFlowClient::OnFrame
+00465120 renderer::Init
+00464ac0 renderer::DestroyPendingRenderables
+00458740 renderer::Present ?
+
+# ============================================================ Renderable
+
+00474ba0 renderer::Renderable::Renderable
+00474aa0 renderer::Renderable::~Renderable
+00473b60 renderer::Renderable::~Renderable_body
+00474ac0 renderer::Renderable::SetNumElements
+00474000 renderer::Renderable::CopyElements
+00473aa0 renderer::Renderable::SetToFadeIn
+00473ac0 renderer::Renderable::SetToFadeOut
+00473ae0 renderer::Renderable::FadeInTo
+00473b10 renderer::Renderable::FadeOutTo
+00473b40 renderer::Renderable::SetMatrix
+00473b70 renderer::Renderable::Reset
+00473c00 renderer::Renderable::GetPosition
+00473c20 renderer::Renderable::SetVisible
+00473c80 renderer::Renderable::Hide
+00473cc0 renderer::Renderable::UpdateRoom
+00473d40 renderer::Renderable::SetFade2
+00473d90 renderer::Renderable::UpdateFade
+00473e70 renderer::Renderable::SetElement
+00473f00 renderer::Renderable::SetElementDrawDist
+00473f50 renderer::Renderable::GetElementDrawDist
+00473fc0 renderer::Renderable::GetElementDrawable
+00473fe0 renderer::Renderable::GetNumElements
+004740c0 renderer::Renderable::Tick
+004740f0 renderer::Renderable::Display
+00559000 renderer::Renderable::GetDistanceRefPos
+00438400 pure3d::Entity::SetName_stub
+# Renderable vtable slots: 0 AddRef 1 Release 2 GetRef 3 dtor 4 Clone 5 EntityClone
+#   6 SetName 7 GetName 8 SetVisible 9 Update(pre-display) 10 Display 11 DisplayImmediate
+#   12 SetMatrix 13 GetPosition 14 Hide 15 GetDistanceRefPos
+
+# ============================================================ RenderableHandle
+
+00461860 renderer::RenderableHandle::RenderableHandle_empty
+00461870 renderer::RenderableHandle::RenderableHandle
+004618d0 renderer::RenderableHandle::Detach
+00461920 renderer::RenderableHandle::__scalar_deleting_dtor
+00461980 renderer::SkidMarksHandle::SkidMarksHandle
+00461a10 renderer::SkidMarksHandle::~SkidMarksHandle
+004619f0 renderer::SkidMarksHandle::__scalar_deleting_dtor
+00464690 renderer::DecalsHandle::DecalsHandle
+00464740 renderer::DecalsHandle::~DecalsHandle
+00464720 renderer::DecalsHandle::__scalar_deleting_dtor
+004647b0 renderer::TraceFireHandle::TraceFireHandle
+00464860 renderer::TraceFireHandle::~TraceFireHandle
+00464840 renderer::TraceFireHandle::__scalar_deleting_dtor
+
+# ============================================================ cameras / view facade
+
+00461ac0 renderer::View_GetRenderingCamera
+00461ad0 renderer::View_GetCullingCamera
+00464ca0 renderer::View_SetRenderingCamera
+00464d00 renderer::View_SetCullingCamera
+00461ed0 renderer::View_SetFog
+00461f70 renderer::View_GetFog
+00461fd0 renderer::View_EnableDepthOfField
+00462100 renderer::View_GetDepthOfField ?
+00462030 renderer::View_EnableColourEffects
+00462050 renderer::View_IsColorEffectsEnabled
+00462060 renderer::View_SetColourEffectsParameters
+00461f50 renderer::View_GetColourEffectsParameters
+004620a0 renderer::View_GetEnvParameters ?
+00462120 renderer::View_SetEnvParameters ?
+00461e00 renderer::View_SetBackGroundColour
+00461e20 renderer::View_SetClearColour ?
+00461e40 renderer::View_SetDrawDistance ?
+00461e60 renderer::View_MapCameraCoordinates ?
+00461ea0 renderer::ColourEffectsParameters::ColourEffectsParameters ?
+00461fb0 renderer::DOFParameters::DOFParameters ?
+00462000 renderer::FogParameters::FogParameters ?
+004620c0 renderer::EnvParameters::EnvParameters ?
+00464e00 renderer::Scene_Enable
+00464e20 renderer::Scene_EnableTypes ?
+00461c70 renderer::EnableSmallRenderBuffer ?
+00461ca0 renderer::SetVideoMode ?
+00462150 renderer::SetFlag1a ?
+00461d00 renderer::RequestScreenShot ?
+00461d40 renderer::IsMainCharacterInInterior
+00461d60 renderer::IsCameraInInterior ?
+00464660 renderer::RenderManager::SetMainCharacter
+00461a70 renderer::SetRenderStateExt ?
+00461dc0 renderer::SetWorldGeoDebugToggles ?
+
+# ============================================================ generic Renderable facade
+
+00462170 renderer::Renderable_SetVisible
+004621a0 renderer::Renderable_IsVisible ?
+004621d0 renderer::Renderable_DisableLOD
+00462200 renderer::Renderable_SetToFadeIn ?
+00462230 renderer::Renderable_SetToFadeOut ?
+00462260 renderer::Renderable_FadeIn ?
+004622c0 renderer::Renderable_FadeOut ?
+00462290 renderer::Renderable_SetFadeLevel ?
+004622f0 renderer::Renderable_IsFullyFaded ?
+00462340 renderer::Renderable_Destroy
+00462370 renderer::Renderable_SetTransform
+004623a0 renderer::Renderable_GetTimeSinceLastDrawn ?
+00464f00 renderer::Renderable_CreateInstance ?
+00465bc0 renderer::RenderableModel_Find ?
+
+# ============================================================ per-class facade
+
+004623d0 renderer::ParticleEffectRenderable_Play ?
+00462440 renderer::ParticleEffectRenderable_Reset ?
+004624b0 renderer::ParticleEffectRenderable_SetBias ?
+00462530 renderer::ParticleEffectRenderable_IsPlaying ?
+004625d0 renderer::StatePropRenderable_GetDrawable ?
+004627c0 renderer::StatePropRenderable_CreateUniquePose ?
+00462830 renderer::DecalRenderable_AddDecal ?
+004628e0 renderer::DecalRenderable_RemoveDecal ?
+00462960 renderer::TraceFireRenderable_AddTracer ?
+00462a30 renderer::TraceFireRenderable_RemoveTracer ?
+00462aa0 renderer::VehicleRenderable_ShaderSetup ?
+00462df0 renderer::VehicleRenderable_SetPalette ?
+00462ef0 renderer::VehicleRenderable_OverrideStatePropCullingDistances ?
+00462f90 renderer::CharacterRenderable_IsInInterior ?
+00463050 renderer::CharacterRenderable_EnableBone ?
+004630d0 renderer::CharacterRenderable_EnableAllBones ?
+00463140 renderer::CharacterRenderable_SetJointDamage ?
+004632d0 renderer::CharacterRenderable_SetPalette ?
+00463440 renderer::NISRenderable_GetPose ?
+004634e0 renderer::NISRenderable_SetJointDamage ?
+00463c90 renderer::SkidmarkRenderable_AddSkidmark ?
+00463db0 renderer::AddInstance
+00463e60 renderer::RemoveInstance ?
+00463f80 renderer::SetCullDistance
+00464000 renderer::InstanceRenderable_CalculateCullDistance ?
+00464040 renderer::SetInstanceLODScale ?
+
+# ============================================================ creation facade
+
+00465840 renderer::ParticleEffectRenderable_Create ?
+00465990 renderer::StatePropRenderable_CreateInstance ?
+00465c80 renderer::DecalRenderable_CreateInstance ?
+00465d50 renderer::TraceFireRenderable_CreateInstance ?
+00465e60 renderer::VehicleRenderable_CreateInstance ?
+004661b0 renderer::CharacterRenderable_CreateInstance ?
+00466310 renderer::NISRenderable_CreateInstance ?
+004664a0 renderer::ZonePkgRenderable_CreateInstance ?
+00466600 renderer::PlugInRenderable_CreateInstance ?
+004667c0 renderer::SkyRenderable_Create ?
+00466940 renderer::OceanRenderable_CreateInstance ?
+00466b10 renderer::WakeRenderable_CreateInstance ?
+00466ce0 renderer::LightingRenderable_CreateInstance ?
+00466e90 renderer::RainRenderable_CreateInstance ?
+00467060 renderer::CreateInstanceRenderable
+00467210 renderer::ShadowRenderable_CreateInstance ?
+004673f0 renderer::MaskRenderable_CreateInstance ?
+00465500 renderer::FindGeometryInInventory
+004654a0 renderer::FindObjectInInventoryByName ?
+004654d0 renderer::FindObjectInInventoryByName2 ?
+
+# ============================================================ time of day / environment
+
+00461ae0 renderer::TimeOfDay_SetTime ?
+00461b00 renderer::TimeOfDay_SetSpeed ?
+00461b50 renderer::TimeOfDay_Enable ?
+00461bf0 renderer::TimeOfDay_IsUpdating ?
+00461b60 renderer::TimeOfDay_SetRainParameters ?
+00461b80 renderer::TimeOfDay_SetTimeToTransit ?
+00461ba0 renderer::TimeOfDay_SetTimeToHold ?
+00461bc0 renderer::TimeOfDay_EnableRain ?
+00461c10 renderer::TimeOfDay_SetKeyFrameTime ?
+00461c30 renderer::TimeOfDay_AttachClearEnvParam ?
+00461c50 renderer::TimeOfDay_AttachRainyEnvParam ?
+00464230 renderer::TimeOfDay_GetTime ?
+004642a0 renderer::TimeOfDay_IsRaining ?
+0046bd80 renderer::EnvManager::EnvManager ?
+0046c1d0 renderer::EnvManager::Update ?
+0046a520 renderer::EnvManager::IsCameraIndoors
+0046b830 renderer::EnvManager::RegisterStateProp ?
+
+# ============================================================ occluders
+
+00461840 occlude::OccluderLoader::OccluderLoader
+00461650 occlude::OccluderLoader::LoadObject
+00461080 occlude::Occluder::BuildPlanes ?
+00460810 occlude::Occluder::~Occluder
+00460a90 occlude::Occluder::__scalar_deleting_dtor
+00460900 occlude::Occluder_TestSphere
+00460980 occlude::TestSphere
+00460a50 occlude::IsVisible
+00460ab0 occlude::CompareOccludersByHeight ?
+
+# ============================================================ light manager
+
+00460600 renderer::LightManager::LightManager
+0045fa50 renderer::LightManager::FindRoom
+0045fbd0 renderer::LightManager::AddTemplateLight
+0045fc30 renderer::LightManager::RemoveTemplateLight
+0045fc50 renderer::LightManager::UpdateTemplateLight
+00460380 renderer::LightManager::AddLightingZone ?
+0045f9f0 renderer::LightManager::RemoveLightingZone ?
+00460130 renderer::LightManager::Update
+0045fe10 renderer::LightManager::FindLightGroup ?
+004603d0 renderer::LightManager::RebuildOccluders ?
+0045f3c0 renderer::Room::ContainsPoint ?
+00463920 renderer::LightManager_AddTemplateLight ?
+004639a0 renderer::LightManager_RemoveTemplateLight ?
+00463a10 renderer::LightManager_UpdateTemplateLight ?
+004640d0 renderer::LightingZone_Create ?
+00464140 renderer::LightingZone_Destroy ?
+
+# ============================================================ pure3d camera (used for culling)
+
+0069e250 pure3d::Camera::GetDrawDistanceAndLODBias ?
+0069e400 pure3d::Camera::TestSphereCameraSpace
+0069e580 pure3d::Camera::SphereVisible
+0069e690 pure3d::Camera::GetPosition
+0068b850 pure3d::Camera::Camera

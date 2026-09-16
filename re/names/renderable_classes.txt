@@ -1,0 +1,584 @@
+# renderer:: renderable / container / primitive / handle classes  (PC retail)
+# Companion to re/notes/renderable_classes.md.  Format: "<hex addr> <name>".
+# Names for Renderable-base / RenderManager / Scene / handle plumbing live in
+# names/rendercore.txt (other agent); lines here that would collide are commented out.
+# ONE DELIBERATE DISAGREEMENT: 0x00466600 constructs a PropRenderable (ctor 0x004713e0
+# writes vtable 0x0073819c), not a PlugInRenderable -- 0x00464f00 is the PlugIn one.
+# Names without a trailing " ?" are verified from disassembly or from MSVC RTTI
+# (??_R4<Class>@renderer@@6B@ immediately preceding every vtable).
+# Names ending in " ?" are guesses.
+# '#' lines carry struct layouts as: offset type name
+
+# ---------------------------------------------------------------- base
+0073838c renderer::Renderable::vtable
+00474ba0 renderer::Renderable::Renderable
+00474aa0 renderer::Renderable::~Renderable
+00474ac0 renderer::Renderable::SetNumElements
+00473e70 renderer::Renderable::SetElement
+00473f00 renderer::Renderable::SetElementDrawDist
+# (see names/rendercore.txt) 00473f50 renderer::Renderable::SetElementDrawable ?
+# (see names/rendercore.txt) 00473fc0 renderer::Renderable::GetElementDrawable
+00473fe0 renderer::Renderable::GetNumElements
+# (see names/rendercore.txt) 00473aa0 renderer::Renderable::SetFadeTime
+00473d90 renderer::Renderable::UpdateFade
+00473c20 renderer::Renderable::SetVisible
+# (see names/rendercore.txt) 00438400 renderer::Renderable::SetName_stub
+004740c0 renderer::Renderable::Tick
+004740f0 renderer::Renderable::Display
+00473b40 renderer::Renderable::SetMatrix
+00473c00 renderer::Renderable::GetPosition
+00473c80 renderer::Renderable::Hide
+00559000 renderer::Renderable::GetDistanceRefPos
+# (see names/rendercore.txt) 004747f0 renderer::Renderable::Renderable_copy ?
+# (see names/rendercore.txt) 00473cc0 renderer::Renderable::RefreshDrawable ?
+#
+# renderer::Renderable : pure3d::Entity           size 0x84
+#   0x00 void*                 vtable
+#   0x04 i32                   refcount
+#   0x08 u32                   uid
+#   0x14 Matrix                matrix
+#   0x54 i32                   typeMask
+#   0x58 DisplayListElement*   elements_begin
+#   0x5c DisplayListElement*   elements_end
+#   0x60 DisplayListElement*   elements_cap
+#   0x64 u32                   uniqueId          (global counter 0x008113f4)
+#   0x68 float                 fadeTimeScale     (SetFadeTime; rate = 1000/x per second)
+#   0x6c float                 fade
+#   0x70 float                 fade2
+#   0x74 float                 fadeTarget
+#   0x78 float                 timeSinceDrawn
+#   0x7c i32                   sceneId           (Scene::AddRenderable writes Scene+0x14; ctor default 5)
+#   0x80 u8                    flags80           0x01 doDistanceTest  0x02 doFade  0x04 fadeDirection
+#                                                0x08 hasHandle       0x10 isVisible
+#                                                0x20 statePropFitsInPool
+#                                                0x40 useLastElementMaxDist
+#                                                0x80 useBoxBoundsFromPose
+#   0x81 u8                    flags81           0x02 isMatrixDirty
+#
+# renderer::Renderable vtable slots
+#   0 AddRef  1 Release  2 GetRef  3 ~Renderable  4 Entity::vslot4 ?  5 Entity::Clone
+#   6 SetName(stub)  7 unknown ?  8 SetVisible  9 Update(TimeInfo*)  10 Display
+#   11 RenderImmediate  12 SetMatrix  13 GetPosition  14 Hide  15 GetDistanceRefPos
+
+# ---------------------------------------------------------------- scenes / manager (reference only)
+00468490 renderer::RenderManager::Init
+00467810 renderer::RenderManager::Update
+004689a0 renderer::RenderManager::Render
+# (see names/rendercore.txt) 004675b0 renderer::RenderManager::GetLock
+00468ac0 renderer::Scene::AddRenderable
+00468b80 renderer::Scene::Render
+00468c00 renderer::Scene::Update
+00468ed0 renderer::Scene::Scene
+00468cc0 renderer::GamePlayScene::AddRenderable
+00468aa0 renderer::GamePlayScene::Render
+00468c50 renderer::GamePlayScene::Update
+00468f90 renderer::GamePlayScene::GamePlayScene
+#
+# renderer::RenderManager
+#   0x04 Scene**       scenes            (pointer to an array of 4)
+#   0x10 Canvas*       canvas
+#   0x18 bool          initialised
+#   0x1c <interior/stateprop manager>     (ctor 0x0046bd80, size 0xc44, Update 0x0046c1d0)
+#   0x20 <decal/system object>            (ctor 0x00457800, size 0x58,  Update 0x00457fa0)
+#   0x24 <extra RenderImmediate pass>
+#   0x30 DecalRenderable*
+#   0x34 SkidmarkRenderable*
+#   0x38 TraceFireRenderable*
+#   0x3c Renderable*   playerRef
+# renderer::Scene       size 0x1c   (GamePlayScene 0x24)
+#   0x04 Renderable**  begin    0x08 end
+#   0x10 bool          enabled
+#   0x14 i32           sceneId
+#   0x18 u32           typeMaskFilter    (0xffffffff for all four)
+#   0x20 Display_List* displayList       (GamePlayScene only)
+
+# ---------------------------------------------------------------- WorldGeoRenderable
+007381e4 renderer::WorldGeoRenderable::vtable
+00471490 renderer::WorldGeoRenderable::WorldGeoRenderable
+00471d60 renderer::WorldGeoRenderable::~WorldGeoRenderable
+00471570 renderer::WorldGeoRenderable::SetVisible
+00471640 renderer::WorldGeoRenderable::Display
+00471510 renderer::WorldGeoRenderable::Hide
+004714e0 renderer::WorldGeoRenderable::GetDistanceRefPos
+00471d80 renderer::WorldGeoLoader::WorldGeoLoader
+00471ec0 renderer::WorldGeoLoader::LoadObject
+00738230 renderer::WorldGeoLoader::vtable
+# (layout: see notes/renderables.md section 4)
+
+# ---------------------------------------------------------------- ZonePkgRenderable
+00738254 renderer::ZonePkgRenderable::vtable
+00471e70 renderer::ZonePkgRenderable::~ZonePkgRenderable
+00471bc0 renderer::ZonePkgRenderable::SetVisible
+00471c10 renderer::ZonePkgLoader::ApplyZoneEntry
+00471e50 renderer::ZonePkgLoader::ZonePkgLoader
+00472680 renderer::ZonePkgLoader::LoadObject
+00738298 renderer::ZonePkgLoader::vtable
+004664a0 renderer::ZonePkgRenderable_CreateInstance
+# renderer::ZonePkgRenderable : Renderable   size 0x90  typeMask 0x8000
+#   0x84 WorldGeoRenderable**  worldGeos_begin
+#   0x88 WorldGeoRenderable**  worldGeos_end
+#   0x8c WorldGeoRenderable**  worldGeos_cap
+
+# ---------------------------------------------------------------- PropRenderable
+0073819c renderer::PropRenderable::vtable
+004713e0 renderer::PropRenderable::PropRenderable
+00471620 renderer::PropRenderable::~PropRenderable
+00471460 renderer::PropRenderable::Update
+00471480 renderer::PropRenderable::scalar_deleting_dtor ?
+00466600 renderer::PropRenderable_CreateInstance
+# renderer::PropRenderable : Renderable      size 0x84 (no own fields)  typeMask 8
+# ctor(DrawableHierarchy* d, float min, float max, float fade)
+
+# ---------------------------------------------------------------- StatePropRenderable
+0073864c renderer::StatePropRenderable::vtable
+00477b20 renderer::StatePropRenderable::StatePropRenderable_copy
+00477d10 renderer::StatePropRenderable::~StatePropRenderable
+00478070 renderer::StatePropRenderable::Update
+00477a00 renderer::StatePropRenderable::InstantiateDrawable
+00477e10 renderer::StatePropRenderable::NeedsPoseRefresh ?
+00477e60 renderer::SFStatePropLoader::ClassifySize
+00478160 renderer::SFStatePropLoader::SFStatePropLoader
+00478180 renderer::SFStatePropLoader::LoadObject
+00738690 renderer::SFStatePropLoader::vtable
+00465990 renderer::StatePropRenderable_CreateInstance
+# (layout: see notes/renderables.md section 2)
+
+# ---------------------------------------------------------------- InstanceRenderable family
+00737dc4 renderer::InstanceRenderable::vtable
+0046f8e0 renderer::InstanceRenderable::InstanceRenderable
+0046f9c0 renderer::InstanceRenderable::scalar_deleting_dtor
+0046f250 renderer::InstanceRenderable::~InstanceRenderable
+0046fc40 renderer::InstanceRenderable::Update
+0046fba0 renderer::InstanceRenderable::AddInstance
+0046fbf0 renderer::InstanceRenderable::SetCullDistance
+00737cfc renderer::InstanceContainer::vtable
+0046f840 renderer::InstanceContainer::InstanceContainer
+0046f230 renderer::InstanceContainer::~InstanceContainer
+00737d7c renderer::InstancePrimitive::vtable
+0046f2e0 renderer::InstancePrimitive::InstancePrimitive
+0046f490 renderer::InstancePrimitive::~InstancePrimitive
+0046ed10 renderer::InstancePrimitive::GetTypeMask
+0046f110 renderer::InstancePrimitive::Display
+0046f4b0 renderer::InstancePrimitive::AddInstance
+0046edc0 renderer::InstancePrimitive::ComputeLODBands
+0046f030 renderer::InstancePrimitive::PreDisplay
+0046f0f0 renderer::InstancePrimitive::DrawInstanced
+# (see names/rendercore.txt) 00467060 renderer::InstanceRenderable_CreateInstance
+00463db0 renderer::AddInstance
+# (see names/rendercore.txt) 00463f80 renderer::InstanceRenderable_SetCullDistance
+# renderer::InstanceRenderable : Renderable  size 0x88  typeMask 0x200
+#   0x84 InstanceContainer*  container
+# renderer::InstanceContainer : DrawableContainer   size 0x50
+# renderer::InstancePrimitive : DrawablePrimitive   size 0x7c  (layer 40/41/42)
+#   0x0c i32     layer
+#   0x38 Geometry* instanceShape
+#   0x3c Geometry* lodShape
+#   0x40 Geometry* lodShape2      (always 0 on PC)
+#   0x44 float     lodScale = 10.0
+#   0x48 float     lastFarBand
+#   0x4c float     swayAmount
+#   0x54 float     time           (written by InstanceRenderable::Update from TimeInfo+0x08)
+#   0x58 Vector    bboxMin   0x64 Vector bboxMax
+#   0x70 i32       bucket
+#   0x74 u8        flags (|=6)
+#   0x78 WindyMatrixPacketList*
+
+# ---------------------------------------------------------------- CharacterRenderable
+00737b3c renderer::CharacterRenderable::vtable
+0046c650 renderer::CharacterRenderable::CharacterRenderable
+0046ca60 renderer::CharacterRenderable::~CharacterRenderable
+0046c8f0 renderer::CharacterRenderable::Update
+0046c620 renderer::CharacterRenderable::Display
+0046c5f0 renderer::CharacterRenderable::GetPosition
+0046ca80 renderer::CharacterLoader::CharacterLoader
+0046cad0 renderer::CharacterLoader::LoadObject
+00737b88 renderer::CharacterLoader::vtable
+004661b0 renderer::CharacterRenderable_CreateInstance
+# renderer::CharacterRenderable : Renderable  size 0xbc  typeMask 0x20
+#   0x84 DrawableHierarchy* drawable
+#   0x88 pure3d::Shader*    shaders[8]     (0x88..0xa4)
+#   0xa8 void*              ?
+#   0xac u8 ?   0xad u8 ?
+#   0xb0 Vector             position       (returned by GetPosition)
+
+# ---------------------------------------------------------------- VehicleRenderable family
+00738704 renderer::VehicleRenderable::vtable
+00479780 renderer::VehicleRenderable::~VehicleRenderable
+00479cc0 renderer::VehicleRenderable::Update
+00478b90 renderer::VehicleRenderable::Display
+0047a180 renderer::VehicleRenderable::BuildFromComposite ?
+00738794 renderer::VehicleContainer::vtable
+00479e00 renderer::VehicleContainer::VehicleContainer
+00479580 renderer::VehicleContainer::scalar_deleting_dtor
+00478f30 renderer::VehicleContainer::~VehicleContainer
+00478fe0 renderer::VehicleContainer::Display
+00479a90 renderer::VehicleContainer::CalcBounds
+00478fb0 renderer::VehicleContainer::SetFading
+00478fc0 renderer::VehicleContainer::IsFading
+00478fd0 renderer::VehicleContainer::GetFadeAmount
+00478b20 renderer::VehicleContainer::GetTypeMask
+0073874c renderer::VehiclePrimitive::vtable
+00479370 renderer::VehiclePrimitive::VehiclePrimitive
+00479560 renderer::VehiclePrimitive::scalar_deleting_dtor
+00478c50 renderer::VehiclePrimitive::~VehiclePrimitive
+00478b10 renderer::VehiclePrimitive::GetTypeMask
+00478d00 renderer::VehiclePrimitive::Display
+00478b00 renderer::VehiclePrimitive::GetShader
+00478f00 renderer::VehiclePrimitive::CalcBounds
+00479cf0 renderer::VehicleLoader::VehicleLoader
+0047a5b0 renderer::VehicleLoader::LoadObject
+00738810 renderer::VehicleLoader::vtable
+00465e60 renderer::VehicleRenderable_CreateInstance
+004653c0 renderer::VehicleRenderable_ShaderSetup ?
+# renderer::VehicleRenderable : Renderable   size 0xc0  typeMask 0x4000
+#   0x84 pure3d::Shader*     shaders[8]    (0x84..0xa0)
+#   0xa4 i32                 numShaders
+#   0xb0 CompositeDrawable*  composite     ? (on the loaded template)
+#   0xb4 CompositeDrawable*  lodComposite  ?
+#   0xb8 VehicleContainer*   container     ? (element 0 of the 2-element LOD chain)
+#   0xbc VehicleContainer*   lodContainer  ?
+# the clone (0x0047a180) builds TWO VehicleContainers and two DisplayListElements, so a
+# vehicle is a 2-element LOD chain and uses Renderable flags80 bit6 (useLastElementMaxDist)
+# renderer::VehicleContainer : DrawableContainer   size 0xd8
+#   0x3c float               sortKey       (world position, written every frame by Display)
+#   0x44/0x48 elements       (one VehiclePrimitive per part)
+#   0x50 <part table>        (init 0x00465050)
+#   0xc0 pure3d::Pose*       pose          private Pose::Copy of the composite's pose
+#   0xc4 pure3d::CompositeDrawable* source
+#   0xcc bool                isFading
+#   0xd0 float               fadeAmount
+# renderer::VehiclePrimitive : DrawablePrimitive
+#   0x0c i32     layer        (inherited from the source prim, or 32 when flags50 & 2)
+#   0x38 void*   parts        (n * 0x10)
+#   0x3c i32     numParts
+#   0x40 Sphere  bounds       (0x40..0x4c)
+#   0x50 u8      flags
+#   0x58 pure3d::Shader*  shaderB
+#   0x5c pure3d::Shader*  shader       (GetShader)
+
+# ---------------------------------------------------------------- SkyRenderable
+007385e4 renderer::SkyRenderable::vtable
+00477470 renderer::SkyRenderable::SkyRenderable
+004774e0 renderer::SkyRenderable::~SkyRenderable
+00477500 renderer::SkyRenderable::Update
+00477450 renderer::SkyRenderable::Display
+00477660 renderer::SkyLoader::SkyLoader
+00477680 renderer::SkyLoader::LoadObject
+00738628 renderer::SkyLoader::vtable
+004667c0 renderer::SkyRenderable_Create
+007c0c60 renderer::g_drawSky ?
+# (layout: see notes/renderables.md section 8)
+
+# ---------------------------------------------------------------- LightingRenderable
+00737eac renderer::LightingRenderable::vtable
+0046ff10 renderer::LightingRenderable::LightingRenderable
+00470240 renderer::LightingRenderable::~LightingRenderable
+0046fe70 renderer::LightingRenderable::Create ?
+00470260 renderer::SFLightGroupLoader::SFLightGroupLoader
+00470280 renderer::SFLightGroupLoader::LoadObject
+00737ef0 renderer::SFLightGroupLoader::vtable
+00466ce0 renderer::LightingRenderable_CreateInstance
+008111cc renderer::gLightManager
+# (layout: see notes/renderables.md section 5; Display is nullsub_2 0x005e1bb0)
+
+# ---------------------------------------------------------------- ShadowRenderable
+007383d4 renderer::ShadowRenderable::vtable
+00474cf0 renderer::ShadowRenderable::ShadowRenderable
+00474ea0 renderer::ShadowRenderable::~ShadowRenderable
+00474cd0 renderer::ShadowRenderable::Update
+004751c0 renderer::ShadowRenderable::Display
+00474ec0 renderer::ShadowRenderable::SetDrawable ?
+004758e0 renderer::ShadowLoader::ShadowLoader
+00475930 renderer::ShadowLoader::LoadObject
+0073841c renderer::ShadowLoader::vtable
+00467210 renderer::ShadowRenderable_CreateInstance
+00475760 renderer::RegisterBuildingShadow ?
+# (layout: see notes/renderables.md section 6)
+
+# ---------------------------------------------------------------- Decal family
+00737cac renderer::DecalRenderable::vtable
+007c0738 ??_R0?AVDecalRenderable@renderer@@@8
+0046eb00 renderer::DecalRenderable::DecalRenderable
+0046ebb0 renderer::DecalRenderable::scalar_deleting_dtor
+0046dc10 renderer::DecalRenderable::~DecalRenderable
+0046ebd0 renderer::DecalRenderable::Update
+0046d150 renderer::Renderable::RenderImmediate_viaContainer
+# ^ shared body `this->container->vslot10(0,0)`; used as vslot 11 by both
+#   DecalRenderable and SkidmarkRenderable (MSVC ICF)
+0046ebe0 renderer::DecalRenderable::RemoveDecal
+0046ec10 renderer::DecalRenderable::ClearDecals ?
+00737bfc renderer::DecalContainer::vtable
+0046ea70 renderer::DecalContainer::DecalContainer
+0046dbf0 renderer::DecalContainer::~DecalContainer
+0046d120 renderer::DecalContainer::scalar_deleting_dtor ?
+004773e0 renderer::DrawableContainer_DisplayImmediate
+# ^ shared body `elements[0]->vslot8()`; used as vslot 10 by both
+#   DecalContainer and SkidmarkContainer (MSVC ICF)
+# 004760d0 (mask 0x01000000) is shared with renderer::SkidmarkPrimitive::GetTypeMask
+00737bb4 renderer::DecalPrimitive::vtable
+0046d780 renderer::DecalPrimitive::DecalPrimitive
+0046d840 renderer::DecalPrimitive::~DecalPrimitive
+0046d110 renderer::DecalPrimitive::GetTypeMask
+0046d860 renderer::DecalPrimitive::Display
+0046ced0 renderer::DecalPrimitive::Update
+0046d040 renderer::DecalPrimitive::RemoveDecal
+0046d0b0 renderer::DecalPrimitive::ClearDecals ?
+0046d1d0 renderer::DecalPrimitive::Decal_ctor
+0046ce10 renderer::DecalPrimitive::Decal_dtor
+00737c78 renderer::DecalPrimitive::CDecalDrawable::vtable
+0046d3a0 renderer::DecalPrimitive::CDecalDrawable::CDecalDrawable
+0046dd70 renderer::DecalPrimitive::CDecalDrawable::~CDecalDrawable
+00737c88 renderer::DecalPrimitive::CStaticDecalDrawable::vtable
+0046d3c0 renderer::DecalPrimitive::CStaticDecalDrawable::CStaticDecalDrawable
+0046ddb0 renderer::DecalPrimitive::CStaticDecalDrawable::~CStaticDecalDrawable
+0046d4c0 renderer::DecalPrimitive::CStaticDecalDrawable::Build ?
+00737c98 renderer::DecalPrimitive::COceanDecalDrawable::vtable
+0046d4e0 renderer::DecalPrimitive::COceanDecalDrawable::COceanDecalDrawable
+0046ddd0 renderer::DecalPrimitive::COceanDecalDrawable::~COceanDecalDrawable
+0046d670 renderer::DecalPrimitive::COceanDecalDrawable::Build ?
+0046ce20 renderer::DecalPrimitive::COceanDecalDrawable::Update ?
+007378a0 renderer::DecalsHandle::vtable
+00464690 renderer::DecalsHandle::DecalsHandle
+# (see names/rendercore.txt) 00464720 renderer::DecalsHandle::scalar_deleting_dtor
+00464740 renderer::DecalsHandle::~DecalsHandle
+00465c80 renderer::DecalRenderable_CreateInstance
+# (see names/rendercore.txt) 008111f8 renderer::gNextDecalsHandleId
+# renderer::DecalRenderable : Renderable   size 0x88  typeMask 0x2000
+#   0x84 DecalContainer* container
+# renderer::DecalContainer : DrawableContainer   size 0x50   (sortKey +0x3c = 0.0)
+# renderer::DecalPrimitive : DrawablePrimitive   size 0x40
+#   0x0c i32    layer = 0    (unused: the container draws immediately)
+#   0x38 i32    maxDecals
+#   0x3c Decal* decals       (array of 0x24-byte records; +0x14 = 3, +0x00/+0x20 = 0)
+# renderer::DecalsHandle   size 0x14
+#   0x04 Renderable*     renderable (the singleton)   0x08 u32 uniqueId
+#   0x0c u32             handleId
+#   0x10 pure3d::Shader* shader
+
+# ---------------------------------------------------------------- Skidmark family
+00738594 renderer::SkidmarkRenderable::vtable
+00476ad0 renderer::SkidmarkRenderable::SkidmarkRenderable
+00476b80 renderer::SkidmarkRenderable::scalar_deleting_dtor
+00476410 renderer::SkidmarkRenderable::~SkidmarkRenderable
+00476ba0 renderer::SkidmarkRenderable::Update
+# 0046d150 is shared: see renderer::Renderable::RenderImmediate_viaContainer
+00738514 renderer::SkidmarkContainer::vtable
+00476a30 renderer::SkidmarkContainer::SkidmarkContainer
+004763f0 renderer::SkidmarkContainer::~SkidmarkContainer
+004760e0 renderer::SkidmarkContainer::scalar_deleting_dtor ?
+# 004773e0 is shared: see renderer::DrawableContainer_DisplayImmediate
+004760f0 renderer::SkidmarkContainer::GetTypeMask
+007384cc renderer::SkidmarkPrimitive::vtable
+00476320 renderer::SkidmarkPrimitive::~SkidmarkPrimitive
+004760d0 renderer::SkidmarkPrimitive::GetTypeMask
+00476090 renderer::SkidmarkPrimitive::Display
+00475f70 renderer::SkidmarkPrimitive::Update ?
+007384b8 renderer::Skidmark::vtable
+00477340 renderer::Skidmark::Skidmark
+004764c0 renderer::Skidmark::Draw
+00476100 renderer::Skidmark::vslot1 ?
+00476480 renderer::Skidmark::GetBoundingSphere
+00476010 renderer::Skidmark::Kill ?
+00476050 renderer::Skidmark::Release ?
+00737824 renderer::SkidMarksHandle::vtable
+00461980 renderer::SkidMarksHandle::SkidMarksHandle
+# (see names/rendercore.txt) 004619f0 renderer::SkidMarksHandle::scalar_deleting_dtor
+00461a10 renderer::SkidMarksHandle::~SkidMarksHandle
+00476120 renderer::SkidMarksHandle::State_ctor ?
+00476230 renderer::SkidMarksHandle::State_dtor ?
+00463ab0 renderer::SkidMarks_CreateInstance ?
+008113f8 renderer::gSkidmarks
+# (see names/rendercore.txt) 008111f4 renderer::gNextSkidMarksHandleId
+# renderer::SkidmarkRenderable : Renderable  size 0x88  typeMask 0x100000
+#   0x84 SkidmarkContainer* container      (NOT bound as a DisplayListElement)
+# renderer::SkidmarkContainer : DrawableContainer  size 0x50  (sortKey +0x3c = 0.0)
+# renderer::SkidmarkPrimitive : DrawablePrimitive  size 0x3c  (layer 1, unused)
+#   0x38 bool  enabled = 1
+# renderer::Skidmark    size 0x684
+#   0x638 ?      0x63c Box bounds     0x654 u8      0x664 ?
+#   0x668 float = 1.0                 0x66c/0x66d u8
+#   0x67c float fadeDistance (5700.0 when released)   0x680 u8 active
+# renderer::gSkidmarks = Skidmark*[48] at 0x008113f8
+
+# ---------------------------------------------------------------- TraceFire
+007386b4 renderer::TraceFireRenderable::vtable
+00478490 renderer::TraceFireRenderable::TraceFireRenderable
+00478540 renderer::TraceFireRenderable::~TraceFireRenderable
+004783a0 renderer::TraceFireRenderable::AddTracer ?
+00478430 renderer::TraceFireRenderable::Update
+00478560 renderer::TraceFireRenderable::RenderImmediate
+007378a8 renderer::TraceFireHandle::vtable
+004647b0 renderer::TraceFireHandle::TraceFireHandle
+# (see names/rendercore.txt) 00464840 renderer::TraceFireHandle::scalar_deleting_dtor
+00464860 renderer::TraceFireHandle::~TraceFireHandle
+00465d50 renderer::TraceFireRenderable_CreateInstance
+# renderer::TraceFireRenderable : Renderable   size 0x8c  typeMask 2
+#   0x84 Tracer* tracers    (count * 0x4c bytes)
+#   0x88 i32     count
+# renderer::TraceFireHandle   size 0x14
+#   0x04 Renderable* renderable  0x08 uniqueId  0x0c handleId
+#   0x10 pure3d::CompositeDrawable* mesh
+
+# ---------------------------------------------------------------- Ocean family
+007380c4 renderer::OceanRenderable::vtable
+00470ad0 renderer::OceanRenderable::OceanRenderable
+00470ba0 renderer::OceanRenderable::~OceanRenderable
+004709b0 renderer::OceanRenderable::scalar_deleting_dtor ?
+00470be0 renderer::OceanRenderable::Update
+00737ffc renderer::OceanContainer::vtable
+00470a40 renderer::OceanContainer::OceanContainer
+00470990 renderer::OceanContainer::~OceanContainer
+004707e0 renderer::OceanContainer::scalar_deleting_dtor ?
+00470800 renderer::OceanContainer::GetTypeMask
+0073807c renderer::OceanPrimitive::vtable
+00470820 renderer::OceanPrimitive::OceanPrimitive
+00470a20 renderer::OceanPrimitive::~OceanPrimitive
+004707b0 renderer::OceanPrimitive::GetTypeMask
+004707a0 renderer::OceanPrimitive::Display
+004707c0 renderer::OceanPrimitive::CalcBounds
+00466940 renderer::OceanRenderable_CreateInstance
+# renderer::OceanRenderable : Renderable   size 0x88  typeMask 0x40   (flags80 &= ~3)
+#   0x84 OceanContainer* container
+# renderer::OceanContainer : DrawableContainer  size 0x50  (sortKey +0x3c = 0.5f)
+# renderer::OceanPrimitive : DrawablePrimitive  size 0x48
+#   0x0c i32   layer = 27
+#   0x28 Sphere bounds  (re-centred on the camera each CalcBounds, radius 100000)
+#   0x38 pure3d ocean renderer object (ctor 0x00689af0, draw 0x00689aa0)
+#   0x3c/0x40/0x44  the three AddRef'd ctor arguments
+
+# ---------------------------------------------------------------- Wake family
+007388fc renderer::WakeRenderable::vtable
+0047b4e0 renderer::WakeRenderable::WakeRenderable
+0047b5c0 renderer::WakeRenderable::~WakeRenderable
+0047aef0 renderer::WakeRenderable::scalar_deleting_dtor ?
+0047b660 renderer::WakeRenderable::Update
+00738834 renderer::WakeContainer::vtable
+0047b450 renderer::WakeContainer::WakeContainer
+0047aed0 renderer::WakeContainer::~WakeContainer
+0047aab0 renderer::WakeContainer::scalar_deleting_dtor ?
+0047aac0 renderer::WakeContainer::GetTypeMask
+007388b4 renderer::WakePrimitive::vtable
+0047af60 renderer::WakePrimitive::WakePrimitive
+0047b040 renderer::WakePrimitive::~WakePrimitive
+0047aaa0 renderer::WakePrimitive::GetTypeMask
+0047ab90 renderer::WakePrimitive::Display
+0047ad10 renderer::WakePrimitive::Reset ?
+0047b060 renderer::WakePrimitive::Simulate ?
+00466b10 renderer::WakeRenderable_CreateInstance
+# renderer::WakeRenderable : Renderable   size 0x88  typeMask 0x80  (flags80 &= ~1)
+#   0x84 WakeContainer* container ; drawDist {0, 1000, 100}
+# renderer::WakeContainer : DrawableContainer  size 0x50  (sortKey +0x3c = 0.89f)
+# renderer::WakePrimitive : DrawablePrimitive  size 0xe94
+#   0x0c   i32    layer = 30
+#   0x4c   segment[40] of 0x1c bytes
+#   0x498  float  posA[...]     0x678 float posB[...]    0x8d0 <per-segment 8-byte>
+#   0x858  u8     alpha[...]
+#   0xe64  pure3d::Shader* shader
+#   0xe84  float = 2.0   0xe88 float = 3.0   0xe8c ?   0xe90 u8 flags
+
+# ---------------------------------------------------------------- RainRenderable
+0073833c renderer::RainRenderable::vtable
+004732c0 renderer::RainRenderable::RainRenderable
+004734e0 renderer::RainRenderable::~RainRenderable
+00472a60 renderer::RainRenderable::scalar_deleting_dtor ?
+00473940 renderer::RainRenderable::Update
+00472af0 renderer::RainRenderable::RenderImmediate
+004729e0 renderer::RainRenderable::InitStreaks ?
+00466e90 renderer::RainRenderable_CreateInstance
+# renderer::RainRenderable : Renderable   size 0x454  typeMask 0x800
+#   0xdc..0xe0 bools    0xe4 float = 0.2    0xe8 ?    0xec bool    0xf0 ?
+#   0x104 i32 = 3       0x108 drawable      0x150 ?
+#   0x3ac/0x3b0 ?       0x3b4 float = 1.0   0x3bc ?   0x3c4 i32 = -1   0x450 bool
+
+# ---------------------------------------------------------------- MaskRenderable
+00737f6c renderer::MaskRenderable::vtable
+004704c0 renderer::MaskRenderable::MaskRenderable
+004704a0 renderer::MaskRenderable::~MaskRenderable
+00470490 renderer::MaskRenderable::scalar_deleting_dtor ?
+004673f0 renderer::MaskRenderable_CreateInstance ?
+# renderer::MaskRenderable : Renderable   size 0x84 (no own fields)  typeMask 0x1000
+# ctor(pure3d::Geometry* mesh, const char* name): every PrimGroup of mesh -> layer 36
+
+# ---------------------------------------------------------------- ParticleEffectRenderable
+0073810c renderer::ParticleEffectRenderable::vtable
+00470d70 renderer::ParticleEffectRenderable::ParticleEffectRenderable
+00470ec0 renderer::ParticleEffectRenderable::~ParticleEffectRenderable
+00470e40 renderer::ParticleEffectRenderable::scalar_deleting_dtor ?
+00470c30 renderer::ParticleEffectRenderable::Update
+00471250 renderer::ParticleEffectRenderable::SetMatrix
+00470ee0 renderer::ParticleEffectRenderable::ApplyBias ?
+00465840 renderer::ParticleEffectRenderable_Create
+# renderer::ParticleEffectRenderable : Renderable  size 0xa8  typeMask 4  (Display = nullsub)
+#   0x84 pure3d::ParticleSystem* system
+#   0x88 u32   emitterHandle
+#   0x8c bool  (CompositeDrawable::GetFlag4)
+#   0x90 float biasScale     0x94/0x98/0x9c floats
+#   0xa0 bool  hasBias       0xa4 DrawableHierarchy* drawable
+
+# ---------------------------------------------------------------- NISRenderable
+00737fb4 renderer::NISRenderable::vtable
+004705b0 renderer::NISRenderable::NISRenderable
+00470630 renderer::NISRenderable::~NISRenderable
+00470580 renderer::NISRenderable::scalar_deleting_dtor ?
+00470650 renderer::NISRenderable::Update
+00470810 renderer::Renderable::Display_thunk
+00470550 renderer::NISRenderable::GetPosition
+00466310 renderer::NISRenderable_CreateInstance
+# renderer::NISRenderable : Renderable   size 0x90  typeMask 0x20000  (flags80 &= ~1)
+#   0x84 Vector position    (returned by GetPosition)
+
+# ---------------------------------------------------------------- PlugInRenderable
+00738154 renderer::PlugInRenderable::vtable
+004712d0 renderer::PlugInRenderable::PlugInRenderable
+004713c0 renderer::PlugInRenderable::~PlugInRenderable
+00471300 renderer::PlugInRenderable::scalar_deleting_dtor ?
+00471310 renderer::PlugInRenderable::RenderImmediate
+00471330 renderer::PlugInRenderable::Clone
+00464f00 renderer::Renderable_CreateInstance
+# renderer::PlugInRenderable : Renderable   size 0x88  typeMask 0x40000
+#   0x84 RenderPlugIn* plugin       (vslot0 = render now)
+# vtable has 17 slots: slot 16 = Clone (the only renderable that adds a virtual)
+
+# ---------------------------------------------------------------- RenderableHandle
+0073781c renderer::RenderableHandle::vtable
+# (see names/rendercore.txt) 00461860 renderer::RenderableHandle::RenderableHandle_default
+00461870 renderer::RenderableHandle::RenderableHandle
+# (see names/rendercore.txt) 00461920 renderer::RenderableHandle::scalar_deleting_dtor
+# (see names/rendercore.txt) 004618d0 renderer::RenderableHandle::~RenderableHandle
+# (see names/rendercore.txt) 008110a4 renderer::gHandlesCreated
+# (see names/rendercore.txt) 008110a8 renderer::gHandlesDestroyed
+# (see names/rendercore.txt) 008110ac renderer::gHandlesLive
+# renderer::RenderableHandle   size 12
+#   0x00 void*        vtable
+#   0x04 Renderable*  renderable   (AddRef'd; sets renderable->flags80 |= 0x08)
+#   0x08 u32          uniqueId     (= renderable->+0x64; -1 after destruction)
+# dtor calls renderable->Hide() (vslot 14)
+
+# ---------------------------------------------------------------- pure3d base classes touched here
+00769e14 pure3d::DrawableContainer::vtable
+00769f24 pure3d::DrawablePrimitive::vtable
+00685f70 pure3d::DrawablePrimitive::DrawablePrimitive
+006836e0 pure3d::DrawableContainer::SetElement
+006834c0 pure3d::DrawableContainer::Display
+00683790 pure3d::DrawableContainer::CalcBounds
+006a4c60 pure3d::PrimGroup::SetShader
+00703300 pure3d::set_field_0x0C          # generic 1-arg setter, ICF-folded; NOT a dedicated SetLayer
+0066cc30 pure3d::set_field_0xD0          # generic 1-arg setter (VehicleContainer::SetFadeAmount)
+# pure3d::DrawablePrimitive
+#   0x0c i32     layer       (default from PrimGroup::SetShader: 31 / 1 / 0)
+#   0x28 Sphere  boundingSphere  (0x28..0x34)
+# pure3d::DrawableContainer
+#   0x3c float   sortKey
+#   0x44/0x48    element array (stride 0x10, element[0] = DrawablePrimitive*)
+# DrawableContainer vslots: 10 Display(Display_List*, DisplayListPrimitive*)
+#                           14 CalcBounds  17 SetFading  18 SetFadeAmount
+#                           19 IsFading    20 GetFadeAmount   25 GetTypeMask
+# DrawablePrimitive vslots: 7 GetTypeMask  8 Display()  9 GetShader  13 CalcBounds
+
+# ---------------------------------------------------------------- drawable type masks (vslot 7 / 25)
+# 0x00020000 OceanPrimitive      0x00040000 OceanContainer
+# 0x00080000 WakePrimitive       0x00100000 WakeContainer
+# 0x00200000 InstancePrimitive   0x00400000 DecalPrimitive
+# 0x00800000 VehiclePrimitive == InstanceContainer   (one ICF-folded function, 0x478b10)
+# 0x01000000 SkidmarkPrimitive == DecalContainer     (one ICF-folded function, 0x4760d0)
+# 0x02000000 VehicleContainer    0x04000000 SkidmarkContainer
