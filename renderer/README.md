@@ -143,6 +143,35 @@ version:
   the `PTRN` one. The composite drawable collects the controllers of its elements into its
   own list, which is retail's `CompositeDrawable +0x48`.
 
+## The ocean
+
+`ocean.*` is `renderer::OceanRenderable` / `OceanContainer` / `OceanPrimitive` and the
+`pure3d::Ocean` behind them (`ocean.h`/`.cpp` at the top level); `re/notes/ocean.md` has the
+reversed engine and where every number comes from. The ocean is a **singleton**: there is one
+`OceanObject` in the whole game, z04's, and it builds the renderable out of
+`OceanTemplateDefault` with `renderer::OceanRenderable_CreateInstance(reflectionTexture,
+detailTexture, foamTexture, inventory)` — which p3dview calls in `InitApp` once the common
+libraries are loaded, with the template's own `"skyTexture"` / `"water_01.BMP"` /
+`"Water_Ocean_Foam.tga"`. The primitive carries **layer 27**, which
+`AddContainerElement` maps to display list **60**; that list is walked in group 12 of
+`Render()` with z-write on and **fog on**, so the water takes the horizon's fog colour like the
+rest of the world. The container's sort key is 0.5, `CalcBounds` parks the bounding sphere on
+the camera with radius 100000 and the renderable has `doDistanceTest` and `doFade` cleared, so
+the ocean is never culled and never fades.
+
+The sea is at **y = 0** — `pure3d::Ocean::GetSeaLevel` returns a float that nothing in the
+image ever writes. `OceanTuningTemplateDefault` puts the waves at 0.1..12 m wavelength with an
+amplitude ratio of 0.013, so **the tallest wave in the game is 16 cm**: what you see is the
+shading of the normals, not the displacement. Retail draws all of it in one pass over a static
+*projected grid* (three LOD meshes of camera-space angles, scaled by the camera height every
+frame) with a d3d effect, four texture stages and an animated EMBM bump map. The viewer
+instead builds a camera-centred world grid on the CPU every frame and draws it twice through a
+pddi prim buffer: an untextured "reflection" pass with z-write off, then the `ocean_text`
+shader out of `Common.p3d` alpha blended over it at `DetailOpacity` (0.225) with the detail
+texture tiled at `DetailTextureScale` (0.2, one tile per 5 m). There is no reflection render
+target, no foam and no specular; `re/notes/ocean.md` §6 lists the deviations. View tab >
+Ocean has the switches, `renderer::g_oceanEnabled` the master one.
+
 ## The 84 lists
 
 The `layer` (0..44) baked into each `DrawablePrimitive` at load time is a *material class*

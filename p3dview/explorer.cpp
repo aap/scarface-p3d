@@ -543,6 +543,76 @@ FogGUI(void)
 	ImGui::EndDisabled();
 }
 
+// ---------------------------------------------------------------- ocean
+
+// The water: renderer::OceanRenderable and the pure3d::Ocean behind it. Every value that
+// carries a comment is the game's own, out of OceanTemplateDefault /
+// OceanTuningTemplateDefault / the z04 OceanObject (re/notes/ocean.md).
+static void
+OceanGUI(void)
+{
+	renderer::OceanRenderable *r = renderer::gOcean;
+	if(r == nil)
+		return;
+	if(!ImGui::CollapsingHeader("Ocean"))
+		return;
+	pure3d::Ocean *o = r->GetOcean();
+	if(o == nil)
+		return;
+
+	ImGui::Checkbox("ocean", &renderer::g_oceanEnabled);
+	ImGui::SameLine();
+	ImGui::Checkbox("waves", &o->waves);
+	ImGui::SameLine();
+	ImGui::Checkbox("detail pass", &o->detailPass);
+	ImGui::SameLine();
+	ImGui::Checkbox("lit", &o->lighting);
+	ImGui::BeginDisabled(!renderer::g_oceanEnabled);
+	ImGui::Text("sea level %.1f   (pure3d::Ocean::GetSeaLevel, hard-coded 0 in retail)", o->GetSeaLevel());
+	ImGui::DragFloat("sea level##edit", &o->seaLevel, 0.1f, -100.0f, 100.0f);
+
+	float col[4] = { o->waterColour.R()/255.0f, o->waterColour.G()/255.0f,
+	                 o->waterColour.B()/255.0f, o->waterColour.A()/255.0f };
+	if(ImGui::ColorEdit4("water colour", col))
+		o->waterColour = pddiColour((u8)(col[0]*255.0f), (u8)(col[1]*255.0f),
+		                            (u8)(col[2]*255.0f), (u8)(col[3]*255.0f));
+	ImGui::ColorEdit3("reflection scale", o->reflectionColourScale);
+	ImGui::SameLine();
+	ImGui::TextDisabled("(0.25, 0.23, 0.25)");
+	ImGui::DragFloat3("sky colour", &o->reflectionColour.x, 0.05f, 0.0f, 8.0f);
+	ImGui::SameLine();
+	ImGui::TextDisabled("(not retail: the reflection target)");
+	ImGui::SliderFloat("detail scale", &o->detailTextureScale, 0.0f, 1.0f, "%.3f");
+	ImGui::SameLine();
+	ImGui::TextDisabled("(0.2)");
+	ImGui::SliderFloat("detail opacity", &o->detailOpacity, 0.0f, 1.0f, "%.3f");
+	ImGui::SameLine();
+	ImGui::TextDisabled("(0.225)");
+	ImGui::DragFloat2("detail fade", &o->detailFadeStart, 1.0f, 0.0f, 4000.0f);
+
+	if(ImGui::TreeNode("waves (OceanTuningTemplateDefault)")) {
+		ImGui::SliderInt("wave trains", &o->numWaves, 1, 16);
+		ImGui::SameLine();
+		ImGui::TextDisabled("(16, 4 of them reach the surface)");
+		ImGui::DragFloat("min wave length", &o->minWaveLength, 0.05f, 0.05f, 60.0f);
+		ImGui::DragFloat("max wave length", &o->maxWaveLength, 0.5f, 0.1f, 200.0f);
+		ImGui::DragFloat("amplitude ratio", &o->amplitudeRatio, 0.001f, 0.0f, 0.5f, "%.4f");
+		ImGui::DragFloat("wind direction", &o->windDirectionMean, 1.0f, -180.0f, 180.0f);
+		ImGui::DragFloat("wind variance", &o->windDirectionVariance, 1.0f, 0.0f, 180.0f);
+		ImGui::DragFloat("speed scale", &o->speedScaleFactor, 0.01f, 0.0f, 5.0f);
+		ImGui::TreePop();
+	}
+	if(ImGui::TreeNode("grid (not retail)")) {
+		ImGui::SliderInt("cells", &o->gridCells, 8, 250);
+		ImGui::DragFloat("cell size", &o->cellSize, 0.1f, 0.25f, 64.0f);
+		ImGui::DragFloat("far extent", &o->farExtent, 100.0f, 1000.0f, 100000.0f);
+		ImGui::Text("inner grid +-%.0f m, %d triangles",
+		            o->gridCells*o->cellSize*0.5f, o->gridCells*o->gridCells*2 + 8);
+		ImGui::TreePop();
+	}
+	ImGui::EndDisabled();
+}
+
 // ---------------------------------------------------------------- view tab
 
 
@@ -578,6 +648,7 @@ ViewTab(void)
 	}
 	LightingGUI();
 	FogGUI();
+	OceanGUI();
 	ImGui::Separator();
 	StreamingGUI();
 }
