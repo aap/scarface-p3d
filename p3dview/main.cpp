@@ -4,7 +4,7 @@
 // Read online: https://github.com/ocornut/imgui/tree/master/docs
 
 #include "imgui.h"
-#include "imgui_impl_sdl.h"
+#include "imgui_impl_sdl2.h"
 #include "imgui_impl_opengl3.h"
 #include <stdio.h>
 #include <SDL.h>
@@ -177,6 +177,16 @@ if(0)
         glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		RenderScene();
+	// P3D_SHOT=file.png [P3D_SHOTFRAME=n]: save a screenshot after n frames and quit
+	{
+		static int frame = 0;
+		const char *shot = getenv("P3D_SHOT");
+		int shotframe = getenv("P3D_SHOTFRAME") ? atoi(getenv("P3D_SHOTFRAME")) : 5;
+		if(shot && ++frame == shotframe) {
+			Screenshot(shot);
+			done = true;
+		}
+	}
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         SDL_GL_SwapWindow(window);
     }

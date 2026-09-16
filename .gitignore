@@ -1,0 +1,8 @@
+assets/
+assets_ps2/
+build/
+*/build/
+*.a
+p3dview/p3dview
+p3ddump/a.out
+core.[0-9]*

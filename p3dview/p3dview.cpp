@@ -3,6 +3,8 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <vector>
+#include <string.h>
 
 #include "imgui.h"
 
@@ -10,6 +12,9 @@
 
 #include "p3dview.h"
 #include "camera.h"
+#include "../renderer/display_list.h"
+
+namespace renderer { extern bool displistvisible[NUM_DISPLAY_LISTS]; }
 
 #ifndef nil
 #define nil nullptr
@@ -36,12 +41,24 @@ struct Scene {
 pure3d::CompositeDrawable *composite;
 std::vector<renderer::Renderable*> renderables;
 
+static void
+RegisterShapes(content::LoadInventory *inv)
+{
+	std::vector<pure3d::Geometry*> geos;
+	inv->Collect(geos);
+	for(u32 i = 0; i < geos.size(); i++)
+		renderer::RegisterInstanceShape(geos[i]);
+}
+
 // just some pure3d shit for now
 void
 InitApp(void)
 {
 	pure3d::InitDevice();
 	new renderer::Display_List(200000);
+	// P3D_HIDELIST=a,b,c hides display lists (debugging)
+	if(const char *h = getenv("P3D_HIDELIST"))
+		for(const char *p = h; *p; ) { renderer::displistvisible[atoi(p)] = false; while(*p && *p != ',') p++; if(*p) p++; }
 
 
 	content::loadManager = new content::LoadManager;
@@ -53,6 +70,9 @@ InitApp(void)
 	content::loadManager->AddHandler(new pure3d::SkeletonLoader, pure3d::Skeleton::SKELETON);
 
 	content::loadManager->AddHandler(new renderer::WorldGeoLoader, renderer::Renderable::WORLDGEO_LOADER);
+	content::loadManager->AddHandler(new renderer::ZonePkgLoader, renderer::Renderable::ZONEPKG_LOADER);
+	content::loadManager->AddHandler(new renderer::InstanceLoader(renderer::InstanceLoader::SCRIPTOBJECT), renderer::InstanceLoader::SCRIPTOBJECT);
+	content::loadManager->AddHandler(new renderer::InstanceLoader(renderer::InstanceLoader::GAMEGROUP), renderer::InstanceLoader::GAMEGROUP);
 
 
 	static const char *commonfiles[] = {
@@ -99,6 +119,7 @@ InitApp(void)
 		content::LoadInventory *tmp = content::loadManager->LoadFile(path, commonInv);
 		tmp->SetParent(commonInv);
 		commonInv = tmp;
+		RegisterShapes(tmp);
 	}
 
 	static const char *mapfiles[] = {
@@ -295,6 +316,7 @@ InitApp(void)
 		sprintf(path, "../assets/packages/z04/%s", mapfiles[i]);
 		inv = content::loadManager->LoadFile(path, commonInv);
 
+		RegisterShapes(inv);
 		u32 first = renderables.size();
 		inv->Collect(renderables);
 		for(u32 i = first; i < renderables.size(); i++)
@@ -302,6 +324,16 @@ InitApp(void)
 		inv->Release();
 	}
 	inv = nil;
+
+	// bind eco prop placements to their InstanceShape meshes
+	int resolved = 0, unresolved = 0, nloc = 0;
+	for(u32 i = 0; i < renderables.size(); i++) {
+		renderer::InstanceRenderable *ir = dynamic_cast<renderer::InstanceRenderable*>(renderables[i]);
+		if(ir == nil || ir->modelName.empty()) continue;
+		if(renderer::ResolveInstanceShapes(ir)) { resolved++; nloc += ir->locations.size(); }
+		else { unresolved++; if(getenv("P3D_VERBOSE")) printf("no InstanceShape for %s\n", ir->modelName.c_str()); }
+	}
+	printf("instance objects: %d resolved (%d placements), %d unresolved\n", resolved, nloc, unresolved);
 
 
 /*
@@ -335,6 +367,29 @@ InitScene(void)
 	camera.m_position = Vector(164.94, 29.68, -1011.85);	// shore
 	camera.m_position = Vector(-1306.78, 27.46, 197.28);	// northbeach
 	camera.m_far = 4000.0f;
+
+	// P3D_CAMPOS="x y z" and P3D_CAMTARGET="x y z" override the start camera (for scripted screenshots)
+	const char *e;
+	if((e = getenv("P3D_CAMPOS")) && sscanf(e, "%f %f %f", &camera.m_position.x, &camera.m_position.y, &camera.m_position.z) == 3)
+		camera.m_target = camera.m_position + Vector(0.0f, 0.0f, -1.0f);
+	if((e = getenv("P3D_CAMTARGET")))
+		sscanf(e, "%f %f %f", &camera.m_target.x, &camera.m_target.y, &camera.m_target.z);
+}
+
+#include "../lodepng/lodepng.h"
+
+// Write the current back buffer as PNG (RGBA, flipped to top-down)
+void
+Screenshot(const char *path)
+{
+	int w = (int)windowWidth, h = (int)windowHeight;
+	std::vector<unsigned char> px(w*h*4), flipped(w*h*4);
+	glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+	for(int y = 0; y < h; y++)
+		memcpy(&flipped[y*w*4], &px[(h-1-y)*w*4], w*4);
+	for(int i = 3; i < w*h*4; i += 4) flipped[i] = 255;
+	unsigned err = lodepng_encode32_file(path, flipped.data(), w, h);
+	printf("screenshot %s: %s\n", path, err ? lodepng_error_text(err) : "ok");
 }
 
 struct {
@@ -422,6 +477,7 @@ RenderScene(void)
 
 camPosition = camera.m_position;
 camPosition.x = -camPosition.x;
+	renderer::Display_List::sortCamPosition = camera.m_position;
 
 	context->SetProjectionMatrix(camera.m_projMat);
 	context->SetViewMatrix(camera.m_viewMat);

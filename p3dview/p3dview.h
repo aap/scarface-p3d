@@ -53,4 +53,5 @@ void InitApp(void);
 void InitGL(void* loadproc);
 void InitScene(void);
 void RenderScene(void);
+void Screenshot(const char *path);
 void GUI(void);
