@@ -49,6 +49,7 @@ extern Input input;
 
 extern float timeStep, avgTimeStep;
 extern float windowWidth, windowHeight;
+extern bool guiVisible;	// 'e' toggles every imgui window (clean screenshots); P3D_GUI=0 starts hidden
 
 
 void InitApp(void);

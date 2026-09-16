@@ -9,12 +9,15 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <set>
+#include <algorithm>
 
 #include "imgui.h"
 #include "glad/glad.h"
 
 #include "p3dview.h"
 #include "streaming.h"
+#include "../renderer/streamgraph.h"
 #include "camera.h"
 #include "../renderer/display_list.h"
 
@@ -253,13 +256,10 @@ SelectionTab(void)
 struct ClassGroup { std::vector<std::pair<std::string, IRefCount*>> objs; };
 
 static void
-FilesTab(void)
+InventoryTree(content::LoadInventory *inv)
 {
-	for(u32 f = 0; f < loadedFiles.size(); f++) {
-		LoadedFile &lf = loadedFiles[f];
-		if(!ImGui::TreeNode(lf.name.c_str())) continue;
 		std::map<std::string, ClassGroup> groups;
-		lf.inv->ForEach([&](u32 uid, IRefCount *obj) {
+		inv->ForEach([&](u32 uid, IRefCount *obj) {
 			Entity *e = dynamic_cast<Entity*>(obj);
 			groups[obj->GetClassName()].objs.push_back(std::make_pair(e ? e->GetName() : "?", obj));
 		});
@@ -277,7 +277,138 @@ FilesTab(void)
 			}
 			ImGui::TreePop();
 		}
+}
+
+static void
+FilesTab(void)
+{
+	for(u32 f = 0; f < loadedFiles.size(); f++) {
+		LoadedFile &lf = loadedFiles[f];
+		if(!ImGui::TreeNode(lf.name.c_str())) continue;
+		InventoryTree(lf.inv);
 		ImGui::TreePop();
+	}
+}
+
+// ---------------------------------------------------------------- World tab: the stream graph
+
+struct ZoneInfo {
+	std::string tag, region;
+	std::vector<renderer::StreamTrigger*> triggers;
+	std::vector<std::pair<std::string, std::string>> packages;	// (graph name, slot) Shell/Detail, unique
+	Vector centre; float radius;
+};
+static std::map<std::string, std::vector<ZoneInfo>> worldRegions;	// region -> zones
+static bool worldBuilt;
+
+static void
+BuildWorld(void)
+{
+	worldBuilt = true;
+	std::map<std::string, ZoneInfo> zones;
+	for(renderer::StreamTrigger *t : StreamingTriggers()) {
+		if(t->tag.empty()) continue;
+		ZoneInfo &z = zones[t->tag];
+		z.tag = t->tag;
+		if(z.region.empty()) z.region = t->Region();
+		z.triggers.push_back(t);
+		for(auto &l : t->loads) {
+			if(strcasecmp(l.slot.c_str(), "Shell") && strcasecmp(l.slot.c_str(), "Detail")) continue;
+			bool have = false;
+			for(auto &p : z.packages) if(p.first == l.package) have = true;
+			if(!have) z.packages.push_back(std::make_pair(l.package, l.slot));
+		}
+	}
+	for(auto &kv : zones) {
+		ZoneInfo &z = kv.second;
+		float x0 = 1e30f, x1 = -1e30f, z0 = 1e30f, z1 = -1e30f, y = 0.0f;
+		for(auto *t : z.triggers) {
+			float a, b, c, d; t->Bounds(a, b, c, d);
+			x0 = std::min(x0, a); x1 = std::max(x1, b); z0 = std::min(z0, c); z1 = std::max(z1, d);
+			if(t->points.size()) y = t->points[0].y;
+		}
+		z.centre = Vector((x0+x1)*0.5f, y, (z0+z1)*0.5f);
+		z.radius = 0.5f*sqrtf((x1-x0)*(x1-x0) + (z1-z0)*(z1-z0));
+		std::sort(z.packages.begin(), z.packages.end());
+		worldRegions[z.region.empty() ? "(no region)" : z.region].push_back(z);
+	}
+	for(auto &kv : worldRegions)
+		std::sort(kv.second.begin(), kv.second.end(), [](const ZoneInfo &a, const ZoneInfo &b) { return a.tag < b.tag; });
+}
+
+// run the python exporter in the background; output lands in out/
+static std::string exportStatus;
+static void
+ExportGltf(const char *what, const char *name)
+{
+	char cmd[1024];
+	snprintf(cmd, sizeof(cmd), "mkdir -p ../out && (python3 ../re/p3d2gltf.py --%s %s --flip-x --out ../out/%s.glb > ../out/%s.log 2>&1 &)", what, name, name, name);
+	system(cmd);
+	exportStatus = std::string("exporting ") + name + " -> out/" + name + ".glb (see out/" + name + ".log)";
+}
+
+static void
+ZoneNode(ZoneInfo &z)
+{
+	// resident state of its packages
+	int resident = 0;
+	for(auto &p : z.packages) if(FindPackage(PackageFile(p.first))) resident++;
+	bool here = false;
+	for(auto *t : StreamingCurrent()) if(t->tag == z.tag) here = true;
+	bool pinned = StreamingZonePinned(z.tag.c_str());
+
+	ImGui::PushID(z.tag.c_str());
+	char label[160];
+	snprintf(label, sizeof(label), "%s %s  (%d/%zu)###zone", here ? ">" : pinned ? "*" : resident ? "o" : "-", z.tag.c_str(), resident, z.packages.size());
+	bool open = ImGui::TreeNode(label);
+	ImGui::SameLine();
+	if(ImGui::SmallButton("go")) JumpTo(Sphere(z.centre, std::max(z.radius, 30.0f)));
+	ImGui::SameLine();
+	if(ImGui::SmallButton(pinned ? "unpin" : "pin")) StreamingPinZone(z.tag.c_str(), !pinned);
+	ImGui::SameLine();
+	if(ImGui::SmallButton("glb")) ExportGltf("zone", z.tag.c_str());
+	if(open) {
+		ImGui::TextDisabled("%zu triggers, centre %.0f %.0f, radius %.0f", z.triggers.size(), z.centre.x, z.centre.z, z.radius);
+		for(auto &p : z.packages) {
+			const char *file = PackageFile(p.first);
+			Package *pkg = *file ? FindPackage(file) : nil;
+			if(pkg == nil) {
+				ImGui::TextDisabled("  %-7s %s%s", p.second.c_str(), p.first.c_str(), *file ? "" : "  (not extracted)");
+				continue;
+			}
+			snprintf(label, sizeof(label), "%-7s %s%s", p.second.c_str(), pkg->name.c_str(), pkg->pinned ? "  (pinned)" : "");
+			if(ImGui::TreeNode(label)) {
+				InventoryTree(pkg->inv);
+				ImGui::TreePop();
+			}
+		}
+		ImGui::TreePop();
+	}
+	ImGui::PopID();
+}
+
+static void
+WorldTab(void)
+{
+	if(StreamingTriggers().empty()) { ImGui::TextDisabled("no stream graph loaded"); return; }
+	if(!worldBuilt) BuildWorld();
+	ImGui::TextDisabled("> here  * pinned  o partly resident  -  not loaded");
+	if(!exportStatus.empty()) ImGui::TextWrapped("%s", exportStatus.c_str());
+	for(auto &kv : worldRegions) {
+		ImGui::PushID(kv.first.c_str());
+		int here = 0;
+		for(auto &z : kv.second) for(auto *t : StreamingCurrent()) if(t->tag == z.tag) { here++; break; }
+		char label[128];
+		snprintf(label, sizeof(label), "%s%s  (%zu subzones)###region", here ? "> " : "", kv.first.c_str(), kv.second.size());
+		bool open = ImGui::TreeNodeEx(label, here ? ImGuiTreeNodeFlags_DefaultOpen : 0);
+		ImGui::SameLine();
+		if(ImGui::SmallButton("glb")) ExportGltf("region", kv.first.c_str());
+		if(open) {
+			for(auto &z : kv.second)
+				if(MatchFilter(z.tag.c_str())) ZoneNode(z);
+			ImGui::TreePop();
+		}
+		ImGui::PopID();
 	}
 }
 
@@ -371,6 +502,7 @@ ExplorerGUI(void)
 	float w = ImGui::GetContentRegionAvail().x;
 	ImGui::BeginChild("left", ImVec2(w*0.45f, 0), ImGuiChildFlags_ResizeX | ImGuiChildFlags_Borders);
 	if(ImGui::BeginTabBar("left_tab")) {
+		if(ImGui::BeginTabItem("World")) { WorldTab(); ImGui::EndTabItem(); }
 		if(ImGui::BeginTabItem("Files")) { FilesTab(); ImGui::EndTabItem(); }
 		if(ImGui::BeginTabItem("Renderables")) { RenderablesTab(); ImGui::EndTabItem(); }
 		ImGui::EndTabBar();
@@ -481,7 +613,7 @@ InitLines(void)
 void
 ExplorerDrawOverlay(void)
 {
-	if(sel.obj == nil) return;
+	if(sel.obj == nil || !guiVisible) return;
 	if(lineProg == 0) InitLines();
 
 	// corners of the box (or a cube around the sphere) in native coords

@@ -22,3 +22,12 @@ bool StreamingInit(content::LoadInventory *resolveInv);	// false: no streamgraph
 void StreamingUpdate(const math::Vector &nativePos, float dt);
 void StreamingGUI(void);
 extern bool streamingEnabled;
+
+// for the explorer's World tab
+namespace renderer { class StreamTrigger; }
+const std::vector<renderer::StreamTrigger*> &StreamingTriggers(void);
+const std::vector<renderer::StreamTrigger*> &StreamingCurrent(void);	// containing the camera
+Package *FindPackage(const char *file);
+const char *PackageFile(const std::string &graphName);	// graph name -> file name in pkgdir, "" if absent
+void StreamingPinZone(const char *tag, bool pin);		// keep a subzone's Shell+Detail packages resident
+bool StreamingZonePinned(const char *tag);

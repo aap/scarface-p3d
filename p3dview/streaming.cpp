@@ -106,13 +106,63 @@ UnloadPackage(Package *pkg)
 	delete pkg;
 }
 
-static Package*
-FindPackage(const std::string &file)
+Package*
+FindPackage(const char *file)
 {
 	for(u32 i = 0; i < packages.size(); i++)
-		if(strcasecmp(packages[i]->name.c_str(), file.c_str()) == 0)
+		if(strcasecmp(packages[i]->name.c_str(), file) == 0)
 			return packages[i];
 	return nil;
+}
+
+const std::vector<renderer::StreamTrigger*> &StreamingTriggers(void) { return triggers; }
+const std::vector<renderer::StreamTrigger*> &StreamingCurrent(void) { return current; }
+
+const char*
+PackageFile(const std::string &graphName)
+{
+	auto it = fileIndex.find(graphName);
+	return it == fileIndex.end() ? "" : it->second.c_str();
+}
+
+static void
+ZoneFiles(const char *tag, std::set<std::string> &files)
+{
+	for(u32 i = 0; i < triggers.size(); i++) {
+		if(strcasecmp(triggers[i]->tag.c_str(), tag) != 0) continue;
+		std::vector<std::string> names;
+		triggers[i]->Packages("Shell", names);
+		triggers[i]->Packages("Detail", names);
+		for(auto &n : names) {
+			const char *f = PackageFile(n);
+			if(*f) files.insert(f);
+		}
+	}
+}
+
+void
+StreamingPinZone(const char *tag, bool pin)
+{
+	std::set<std::string> files;
+	ZoneFiles(tag, files);
+	for(auto &f : files) {
+		Package *p = FindPackage(f.c_str());
+		if(p == nil && pin) p = LoadPackage(f.c_str(), resolver, true);
+		if(p) { p->pinned = pin; p->unneeded = 0.0f; }
+	}
+}
+
+bool
+StreamingZonePinned(const char *tag)
+{
+	std::set<std::string> files;
+	ZoneFiles(tag, files);
+	if(files.empty()) return false;
+	for(auto &f : files) {
+		Package *p = FindPackage(f.c_str());
+		if(p == nil || !p->pinned) return false;
+	}
+	return true;
 }
 
 bool
@@ -187,7 +237,7 @@ StreamingUpdate(const math::Vector &pos, float dt)
 	// load the missing ones, a few per frame so the hitch stays small
 	int loads = firstUpdate ? 1000 : loadsPerFrame;
 	for(auto &file : wanted) {
-		Package *p = FindPackage(file);
+		Package *p = FindPackage(file.c_str());
 		if(p) { p->unneeded = 0.0f; continue; }
 		if(loads-- <= 0) break;
 		LoadPackage(file.c_str(), resolver, false);

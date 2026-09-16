@@ -32,6 +32,7 @@ CCamera camera;
 
 float timeStep, avgTimeStep;
 float windowWidth, windowHeight;
+bool guiVisible = true;
 
 struct Scene {
 	pure3d::CompositeDrawable *drawable;
@@ -445,6 +446,9 @@ extern int nlists;
 void
 GUI(void)
 {
+	static bool first = true;
+	if(first) { first = false; if(const char *e = getenv("P3D_GUI")) guiVisible = atoi(e) != 0; }
+	if(!guiVisible) return;
 	ExplorerGUI();
 	if(0) {
 		char lbl[64];
@@ -542,6 +546,11 @@ HandleSDLEvent(SDL_Event *event, bool ignoreMouse, bool ignoreKeybaord)
 
 	case SDL_KEYDOWN:
 	case SDL_KEYUP:
+		// 'e' hides/shows the GUI, also when a window has focus (but not while typing in one)
+		if(event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_e && !ImGui::GetIO().WantTextInput) {
+			guiVisible = !guiVisible;
+			break;
+		}
 		if(ignoreKeybaord) break;
 		down = event->type == SDL_KEYDOWN;
 		switch(event->key.keysym.sym) {

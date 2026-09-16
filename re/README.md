@@ -102,13 +102,16 @@ Implemented in the repo from these notes (2026-09-15, renderer:: restructured 20
     lists), P3D_DEBUGMODEL=<modelname> (print placements).
   - primgroup.cpp: NORMALLIST was gated on PDDI_V_POSITION instead of PDDI_V_NORMAL (latent nil deref).
   - p3dview/explorer.cpp: imgui Explorer window — Files tab (every loaded inventory, objects grouped by class),
-    Renderables tab (visibility checkboxes), Selection tab (per-class details: world geo flags/draw distances,
+    Renderables tab (visibility checkboxes), World tab (the stream graph: regions > subzones > packages,
+    '>' = camera inside, go / pin / glb buttons; glb runs re/p3d2gltf.py --zone/--region in the background
+    into out/), Selection tab (per-class details: world geo flags/draw distances,
     zone package members, instance placements with jump, composite primitives, container elements with layer
     and shader, shader state), View tab (camera, instance cull, display-list and shader toggles).
     ctrl+click in the view picks the nearest object (ray vs bounding spheres), selection is outlined in red,
     P3D_SELECT=<renderable name> selects at startup. View tab render options (pddiDebug in pddi.h, honoured by
     the GL shaders): no textures, no lighting, no vertex colours, wireframe; P3D_DEBUGRENDER=notex,nolight,novcol,wire.
-  - p3dview: P3D_SHOT=file.png [P3D_SHOTFRAME=n] screenshot-and-quit, P3D_CAMPOS/P3D_CAMTARGET="x y z",
+  - p3dview: 'e' hides/shows the imgui windows (clean screenshots), P3D_GUI=0 starts hidden.
+    P3D_SHOT=file.png [P3D_SHOTFRAME=n] screenshot-and-quit, P3D_CAMPOS/P3D_CAMTARGET="x y z",
     P3D_CAMPOS2="x y z" (jump there half way through a P3D_SHOT run, to exercise streaming),
     P3D_VERBOSE=1 prints per-world-geo distance decisions, unresolved models and package loads/unloads.
   - p3dview/streaming.cpp + renderer/streamgraph.*: the viewer streams the map the way the game does.
