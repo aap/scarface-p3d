@@ -18,13 +18,14 @@ PrimGroup::PrimGroup(u32 vertexFormat, u32 vertexCount)
    mUnknown2(0xFFFFFFFF),
    mPrimBuffer(nil),
    mFade(0.0f),
-   mBaseColours(nil)
+   mBaseColours(nil), mBaseUVs(nil)
 {
 }
 
 PrimGroup::~PrimGroup(void)
 {
 	delete[] mBaseColours;
+	delete[] mBaseUVs;
 }
 
 void
@@ -62,6 +63,30 @@ PrimGroup::SetVertexColourOffsets(const pddiColour *offsets, u32 n)
 		}
 		col |= base & 0xFF000000;
 		stream->Colour(pddiColour(col));
+		stream->Next();
+	}
+	mPrimBuffer->Unlock(stream);
+}
+
+void
+PrimGroup::SetBaseUVs(const pddiVector2 *uvs, u32 n)
+{
+	delete[] mBaseUVs;
+	mBaseUVs = new pddiVector2[n];
+	for(u32 i = 0; i < n; i++)
+		mBaseUVs[i] = uvs[i];
+}
+
+void
+PrimGroup::SetVertexUVOffsets(const pddiVector2 *offsets, u32 n)
+{
+	if(mPrimBuffer == nil || mBaseUVs == nil || pddiNumUVSets(mVertexFormat) == 0)
+		return;
+	if(n > mVertexCount)
+		n = mVertexCount;
+	pddiPrimBufferStream *stream = mPrimBuffer->Lock();
+	for(u32 i = 0; i < n; i++) {
+		stream->TexCoord2(mBaseUVs[i].x + offsets[i].x, mBaseUVs[i].y + offsets[i].y, 0);
 		stream->Next();
 	}
 	mPrimBuffer->Unlock(stream);
@@ -300,14 +325,18 @@ PrimGroupLoader::LoadOptimized(PrimEntry *entry, ChunkFile *f, LoadInventory *in
 				assert(n == mVertexCount);
 				int channel = f->GetI32();
 				assert(channel < nUVChannels);
+				pddiVector2 *uvs = new pddiVector2[n];
+				f->GetData(uvs, n*2, sizeof(float));
 				stream = buf->Lock();
-				pddiVector2 v;
-				while(n--) {
-					f->GetData(&v, 2, sizeof(float));
-					stream->TexCoord2(v.x, v.y, channel);
+				for(u32 i = 0; i < n; i++) {
+					stream->TexCoord2(uvs[i].x, uvs[i].y, channel);
 					stream->Next();
 				}
 				buf->Unlock(stream);
+				// kept so the vertex uv animation can offset them
+				if(channel == 0)
+					pg->SetBaseUVs(uvs, n);
+				delete[] uvs;
 			}
 			break;
 

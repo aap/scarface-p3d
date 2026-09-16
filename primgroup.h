@@ -33,6 +33,9 @@ class PrimGroup : public DrawablePrimitive
 	// a copy of the COLOURLIST, so that the vertex colour animation can add its
 	// per-frame offsets to it instead of accumulating them
 	pddiColour *mBaseColours;
+	// the same for UV channel 0: the sky's horizon gradient is a palette of horizon
+	// colours by hour and its 'UV0' vertex animation slides u across it over the day
+	pddiVector2 *mBaseUVs;
 public:
 	PrimGroup(u32 vertexFormat, u32 vertexCount);
 	~PrimGroup(void);
@@ -51,6 +54,8 @@ public:
 	// and rewrite the vertex buffer's colour channel with base + offset
 	void SetBaseColours(const pddiColour *colours, u32 n);
 	void SetVertexColourOffsets(const pddiColour *offsets, u32 n);
+	void SetBaseUVs(const pddiVector2 *uvs, u32 n);
+	void SetVertexUVOffsets(const pddiVector2 *offsets, u32 n);
 	// not retail: paint every vertex one colour (the sky's below-horizon hemisphere
 	// takes the fog colour until the ocean covers it, renderer/sky.cpp)
 	void SetVertexColour(pddiColour colour);

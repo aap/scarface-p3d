@@ -132,7 +132,8 @@ Implemented in the repo from these notes (2026-09-15, renderer:: restructured 20
     ctrl+click in the view picks the nearest object (ray vs bounding spheres), selection is outlined in red,
     P3D_SELECT=<renderable name> selects at startup. View tab render options (pddiDebug in pddi.h, honoured by
     the GL shaders): no textures, no lighting, no vertex colours, wireframe; P3D_DEBUGRENDER=notex,nolight,novcol,wire.
-  - p3dview: 'e' hides/shows the imgui windows (clean screenshots), P3D_GUI=0 starts hidden.
+  - p3dview: P3D_SKYHIDE=a,b,c hides sky composite elements by name (debugging), P3D_NOSKYFOG=1 keeps the
+    below-horizon hemisphere's own colour. 'e' hides/shows the imgui windows (clean screenshots), P3D_GUI=0 starts hidden.
     P3D_SHOT=file.png [P3D_SHOTFRAME=n] screenshot-and-quit, P3D_CAMPOS/P3D_CAMTARGET="x y z",
     P3D_CAMPOS2="x y z" (jump there half way through a P3D_SHOT run, to exercise streaming),
     P3D_VERBOSE=1 prints per-world-geo distance decisions, unresolved models and package loads/unloads.

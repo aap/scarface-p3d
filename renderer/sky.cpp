@@ -8,6 +8,7 @@
 
 #include <math.h>
 #include <string.h>
+#include <string>
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -184,8 +185,19 @@ SkyLoader::LoadObject(IRefCount **pObject, u32 *pUID, content::ChunkFile *f, con
 	// fade to) for the rainy one.
 	i32 occlusionIndex = 0;
 	i32 n = composite->GetPrimitiveList()->GetNumPrimitives();
+	// P3D_SKYHIDE=a,b,c hides sky composite elements whose name contains a substring (debugging)
+	const char *hide = getenv("P3D_SKYHIDE");
 	for(i32 i = 0; i < n; i++) {
 		DrawableContainer *draw = composite->GetPrimitiveList()->GetPrimitive(i)->GetDrawable();
+		if(hide && draw) {
+			std::string h(hide); size_t p = 0;
+			while(p < h.size()) {
+				size_t q = h.find(',', p); if(q == std::string::npos) q = h.size();
+				if(q > p && strstr(draw->GetName(), h.substr(p, q-p).c_str()))
+					composite->GetPrimitiveList()->GetPrimitive(i)->isVisible = 0;
+				p = q + 1;
+			}
+		}
 		if(draw == nil)
 			continue;
 		for(i32 j = 0; j < draw->GetNumElements(); j++) {

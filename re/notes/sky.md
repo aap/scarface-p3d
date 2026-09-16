@@ -585,3 +585,20 @@ Still not implemented: the uv atlas animation of `0x00017008` (and its `'FSF\0'`
 the `'ORNG'` / `'SRNG'` / `'ERNG'` channels (nothing in z04 has them), the occlusion query
 the sun flares use, a partial fade (only 0 and 1 are honoured), and the vertex animation of
 anything that is not a colour channel.
+
+## 7. The horizon gradient is a palette, not a gradient (2026-09-16, [V])
+
+`skybox2Shape` / `skybox_horizonShape` sample `skyBoxGradHorizon_XB.tga` with **u = 0 on
+every vertex** and v running 0..1. The texture is a 128x128 palette: every column is one
+horizon colour by hour (x=0 dark blue, 32 cream, 48/80 yellow-cream, 96 orange, 112
+red-brown, 127 dark blue again) and the alpha ramps vertically (0 at the top, 178 at the
+bottom). Their `VRTX_*` vertex animation carries, next to `CLR0`, a **`0x00010F01 'UV0\0'`**
+set per key frame: `{ u32 version; u32 'UV0\0'; u32 count; { u32 vertex; float u, v; }[count] }`,
+frame 0 = (0, 0), frame 1 = (1, 0), so the u offset slides across the palette over the day
+and the band under the sky takes the hour's horizon colour, which the artists keyed to the
+fog colours of the environment objects (notes/fog.md). Without it the meshes sit on the
+night column and the band is dark blue all day. `pure3d::VertexUVAnim`,
+`PrimGroup::SetVertexUVOffsets` (geometry.cpp, primgroup.cpp) implement it; the uv frame is
+clamped, not wrapped, so 23:59 does not slide back to the night column.
+
+Debug: `P3D_SKYHIDE=a,b,c` hides sky composite elements by name substring.

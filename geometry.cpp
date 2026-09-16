@@ -8,6 +8,19 @@
 namespace pure3d
 {
 
+VertexUVAnim::VertexUVAnim(i32 numFrames, i32 numVertices)
+ : numFrames(numFrames), numVertices(numVertices)
+{
+	offsets = new pddiVector2[numFrames*numVertices];
+	for(i32 i = 0; i < numFrames*numVertices; i++)
+		offsets[i].x = offsets[i].y = 0.0f;
+}
+
+VertexUVAnim::~VertexUVAnim(void)
+{
+	delete[] offsets;
+}
+
 VertexColourAnim::VertexColourAnim(i32 numFrames, i32 numVertices)
  : numFrames(numFrames), numVertices(numVertices)
 {
@@ -23,7 +36,7 @@ VertexColourAnim::~VertexColourAnim(void)
 
 
 Geometry::Geometry(i32 nPrimGroup)
- : DrawableContainer(nPrimGroup), isFading(false), fadeAmount(0.0f), colourAnim(nil)
+ : DrawableContainer(nPrimGroup), isFading(false), fadeAmount(0.0f), colourAnim(nil), uvAnim(nil)
 {
 }
 
@@ -32,6 +45,7 @@ Geometry::~Geometry(void)
 	for(u32 i = 0; i < frameControllers.size(); i++)
 		Release(frameControllers[i]);
 	delete colourAnim;
+	delete uvAnim;
 }
 
 
@@ -71,30 +85,53 @@ Geometry::Display(DisplayList *list, GameDrawableInfo *info)
 void
 Geometry::SetColourAnimFrame(float frame)
 {
-	if(colourAnim == nil || GetNumElements() < 1)
+	if((colourAnim == nil && uvAnim == nil) || GetNumElements() < 1)
 		return;
 	PrimGroup *pg = (PrimGroup*)GetElement(0)->prim;
 	if(pg == nil)
 		return;
-	i32 nf = colourAnim->numFrames;
-	i32 nv = colourAnim->numVertices;
-	float f = fmodf(frame, (float)nf);
-	if(f < 0.0f) f += (float)nf;
-	i32 i0 = (i32)f;
-	if(i0 >= nf) i0 = nf-1;
-	i32 i1 = (i0+1)%nf;
-	float t = f - (float)i0;
-	pddiColour *a = colourAnim->GetFrame(i0);
-	pddiColour *b = colourAnim->GetFrame(i1);
-	pddiColour *tmp = new pddiColour[nv];
-	for(i32 i = 0; i < nv; i++)
-		tmp[i] = pddiColour(
-			(u8)(a[i].R() + (b[i].R() - a[i].R())*t),
-			(u8)(a[i].G() + (b[i].G() - a[i].G())*t),
-			(u8)(a[i].B() + (b[i].B() - a[i].B())*t),
-			0);
-	pg->SetVertexColourOffsets(tmp, nv);
-	delete[] tmp;
+	if(colourAnim) {
+		i32 nf = colourAnim->numFrames;
+		i32 nv = colourAnim->numVertices;
+		float f = fmodf(frame, (float)nf);
+		if(f < 0.0f) f += (float)nf;
+		i32 i0 = (i32)f;
+		if(i0 >= nf) i0 = nf-1;
+		i32 i1 = (i0+1)%nf;
+		float t = f - (float)i0;
+		pddiColour *a = colourAnim->GetFrame(i0);
+		pddiColour *b = colourAnim->GetFrame(i1);
+		pddiColour *tmp = new pddiColour[nv];
+		for(i32 i = 0; i < nv; i++)
+			tmp[i] = pddiColour(
+				(u8)(a[i].R() + (b[i].R() - a[i].R())*t),
+				(u8)(a[i].G() + (b[i].G() - a[i].G())*t),
+				(u8)(a[i].B() + (b[i].B() - a[i].B())*t),
+				0);
+		pg->SetVertexColourOffsets(tmp, nv);
+		delete[] tmp;
+	}
+	if(uvAnim) {
+		// no wrap: the last key holds (the horizon palette runs u 0 -> 1 over the day
+		// and must not slide back to the night column just before midnight)
+		i32 nf = uvAnim->numFrames;
+		i32 nv = uvAnim->numVertices;
+		float f = frame;
+		if(f < 0.0f) f = 0.0f;
+		if(f > (float)(nf-1)) f = (float)(nf-1);
+		i32 i0 = (i32)f;
+		i32 i1 = i0+1 < nf ? i0+1 : i0;
+		float t = f - (float)i0;
+		pddiVector2 *a = uvAnim->GetFrame(i0);
+		pddiVector2 *b = uvAnim->GetFrame(i1);
+		pddiVector2 *tmp = new pddiVector2[nv];
+		for(i32 i = 0; i < nv; i++) {
+			tmp[i].x = a[i].x + (b[i].x - a[i].x)*t;
+			tmp[i].y = a[i].y + (b[i].y - a[i].y)*t;
+		}
+		pg->SetVertexUVOffsets(tmp, nv);
+		delete[] tmp;
+	}
 }
 
 
@@ -168,19 +205,34 @@ GeometryLoader::LoadObject(IRefCount **pObject, u32 *pUID, content::ChunkFile *f
 			f->GetI32();			// version
 			i32 numFrames = f->GetI32();
 			VertexColourAnim *anim = nil;
+			VertexUVAnim *uvanim = nil;
 			while(f->ChunksRemaining()) {
 				if(f->BeginChunk() == Geometry::VERTEXANIMFRAME) {
 					f->GetI32();		// version
 					i32 frame = f->GetI32();
 					f->GetI32();		// unknown, 0
 					while(f->ChunksRemaining()) {
-						if(f->BeginChunk() == Geometry::VERTEXANIMDATA) {
+						u32 id = f->BeginChunk();
+						if(id == Geometry::VERTEXANIMDATA || id == Geometry::VERTEXANIMUV) {
 							// { u32 version; u32 "CLR0"; u32 count;
 							//   { u32 vertex; u16 r, g, b, a; } [count] }
 							f->GetI32();
 							u32 type = f->GetU32();
 							i32 n = f->GetI32();
-							if(type == FOURCC("CLR0") && numFrames > 0 && n > 0) {
+							if(type == FOURCC("UV0\0") && numFrames > 0 && n > 0) {
+								// { u32 vertex; float u, v; } [count]
+								if(uvanim == nil)
+									uvanim = new VertexUVAnim(numFrames, n);
+								for(i32 i = 0; i < n; i++) {
+									u32 v = f->GetU32();
+									float u = f->GetFloat(), vv = f->GetFloat();
+									if(frame >= 0 && frame < uvanim->numFrames &&
+									   (i32)v < uvanim->numVertices) {
+										uvanim->GetFrame(frame)[v].x = u;
+										uvanim->GetFrame(frame)[v].y = vv;
+									}
+								}
+							} else if(type == FOURCC("CLR0") && numFrames > 0 && n > 0) {
 								if(anim == nil)
 									anim = new VertexColourAnim(numFrames, n);
 								for(i32 i = 0; i < n; i++) {
@@ -206,6 +258,8 @@ GeometryLoader::LoadObject(IRefCount **pObject, u32 *pUID, content::ChunkFile *f
 			}
 			if(anim)
 				geo->SetColourAnim(anim);
+			if(uvanim)
+				geo->SetUVAnim(uvanim);
 			break;
 		}
 

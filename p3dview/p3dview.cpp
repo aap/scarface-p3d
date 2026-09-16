@@ -469,7 +469,17 @@ void
 GUI(void)
 {
 	static bool first = true;
-	if(first) { first = false; if(const char *e = getenv("P3D_GUI")) guiVisible = atoi(e) != 0; }
+	if(first) {
+		first = false;
+		if(const char *e = getenv("P3D_GUI")) guiVisible = atoi(e) != 0;
+		// P3D_DEBUGRENDER=notex,nolight,novcol,wire --- also with the GUI hidden
+		if(const char *dr = getenv("P3D_DEBUGRENDER")) {
+			pddiDebug.noTextures = strstr(dr, "notex") != nil;
+			pddiDebug.noLighting = strstr(dr, "nolight") != nil;
+			pddiDebug.noVertexColours = strstr(dr, "novcol") != nil;
+			pddiDebug.wireframe = strstr(dr, "wire") != nil;
+		}
+	}
 	if(!guiVisible) return;
 	ExplorerGUI();
 	if(0) {

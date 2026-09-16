@@ -21,6 +21,19 @@ using namespace content;
 // sets: the COLOURLIST is the night sky and frame 0 is all zeros, the day frames add
 // the blue back in (re/notes/sky.md). Retail runs it through a streamed prim group
 // whose vertices live in RAM; we rewrite the vertex buffer instead.
+// 0x10F01 'UV0\0': per-vertex uv offsets per key frame (the sky's horizon gradient)
+class VertexUVAnim
+{
+public:
+	i32 numFrames;
+	i32 numVertices;
+	pddiVector2 *offsets;		// [numFrames*numVertices]
+
+	VertexUVAnim(i32 numFrames, i32 numVertices);
+	~VertexUVAnim(void);
+	pddiVector2 *GetFrame(i32 i) { return &offsets[i*numVertices]; }
+};
+
 class VertexColourAnim
 {
 public:
@@ -44,6 +57,7 @@ class Geometry : public DrawableContainer
 	// the composite drawable copies them into its own list at load time
 	std::vector<FrameController*> frameControllers;
 	VertexColourAnim *colourAnim;
+	VertexUVAnim *uvAnim;
 public:
 	enum {
 		MESH			= 0x10000,
@@ -88,6 +102,7 @@ public:
 		// key frames, one chunk per key frame, and the per-vertex data itself
 		VERTEXANIM		= 0x121305,
 		VERTEXANIMFRAME		= 0x121306,
+		VERTEXANIMUV		= 0x10F01,
 		VERTEXANIMDATA		= 0x10F02,
 
 		// { u32 version; float key; } --- the container sort key, clamped to [0,1]
@@ -107,6 +122,7 @@ public:
 	virtual float GetFadeAmount(void) { return fadeAmount; }
 
 	void SetColourAnim(VertexColourAnim *anim) { colourAnim = anim; }
+	void SetUVAnim(VertexUVAnim *anim) { uvAnim = anim; }
 	i32 GetNumColourAnimFrames(void) { return colourAnim ? colourAnim->numFrames : 0; }
 	// interpolate between key frame floor(frame) and the next one (wrapping) and push
 	// the result into the first prim group's vertex buffer. retail does the same thing
