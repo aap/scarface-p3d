@@ -143,6 +143,46 @@ version:
   the `PTRN` one. The composite drawable collects the controllers of its elements into its
   own list, which is retail's `CompositeDrawable +0x48`.
 
+## The ocean
+
+`ocean.*` is `renderer::OceanRenderable` / `OceanContainer` / `OceanPrimitive` and the
+`pure3d::Ocean` behind them (`ocean.h`/`.cpp` at the top level); `re/notes/ocean.md` has the
+reversed engine and where every number comes from. The ocean is a **singleton**: there is one
+`OceanObject` in the whole game, z04's, and it builds the renderable out of
+`OceanTemplateDefault` with `renderer::OceanRenderable_CreateInstance(reflectionTexture,
+detailTexture, foamTexture, inventory)` — which p3dview calls in `InitApp` once the common
+libraries are loaded, with the template's own `"skyTexture"` / `"water_01.BMP"` /
+`"Water_Ocean_Foam.tga"`. The primitive carries **layer 27**, which
+`AddContainerElement` maps to display list **60**; that list is walked in group 12 of
+`Render()` with z-write on and **fog on**, so the water takes the horizon's fog colour like the
+rest of the world. The container's sort key is 0.5, `CalcBounds` parks the bounding sphere on
+the camera with radius 100000 and the renderable has `doDistanceTest` and `doFade` cleared, so
+the ocean is never culled and never fades.
+
+The sea is at **y = 0** — `pure3d::Ocean::GetSeaLevel` returns a float that nothing in the
+whole image ever writes. `pure3d::WaveModel` is retail's: sixteen wave trains generated from
+the six `OceanTuningTemplate` numbers by the PRNG at `0x6a8180` (wavelengths spread by the
+**cube** of `i/15`, so the short chop lands in the first slots), each living 15 s with a 2 s
+smoothstep fade in and out and then respawning, and `Ocean::Update` ticking them **twice per
+frame** exactly as retail does. With the shipped values **the tallest wave in the game is
+16 cm**: what you see is the shading of the normals, not the displacement. Retail hands only
+the first **four** trains to the surface and gets its visible ripples from an animated EMBM
+bump map; we have no bump map, so all sixteen displace the grid.
+
+The grid is retail's too — a **projected grid**: rows are evenly spaced *angles from straight
+down*, so the tessellation is uniform on screen, densest right in front of the camera,
+stretching to the far plane, with one clamped row for the horizon. Retail builds three of them
+once (50/110/170 quads across) and lets `Scale(cameraHeight)·RotateY(cameraYaw)·Translate(camXZ)`
+and the vertex shader do the rest; we rebuild it on the CPU every frame because the height
+field is evaluated there, and fade out any wave the local quad cannot carry. Where retail draws
+one pass with a d3d effect and four texture stages, the viewer draws two through a pddi prim
+buffer: an untextured "reflection" pass with z-write off, then the `ocean_text` shader out of
+`Common.p3d` alpha blended over it at `DetailOpacity` (0.225) with the detail texture tiled at
+`DetailTextureScale` (0.2, one tile per 5 m). There is no reflection render target, no foam and
+no specular; `re/notes/ocean.md` §6 lists every deviation, including the two anti-aliasing
+knobs the missing mip maps force on us. View tab > Ocean has the switches (and a live table of
+the sixteen trains), `renderer::g_oceanEnabled` is the master one.
+
 ## The 84 lists
 
 The `layer` (0..44) baked into each `DrawablePrimitive` at load time is a *material class*

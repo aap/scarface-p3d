@@ -1,23 +1,19 @@
 SRC = $(wildcard *.cpp gl/*.cpp renderer/*.cpp lodepng/*.cpp)
-SRCX = $(notdir $(SRC))
-OBJ = $(addprefix build/, $(addsuffix .o, $(basename $(SRCX))))
-DEP = $(addprefix build/, $(addsuffix .d, $(basename $(SRCX))))
-#OBJ = $(SRCX:%.cpp=build/%.o)
-#DEP = $(SRCX:%.cpp=build/%.d)
+# the object tree mirrors the source tree: ocean.cpp and renderer/ocean.cpp are two
+# different files and $(notdir) would map them onto the same .o
+OBJ = $(addprefix build/, $(SRC:.cpp=.o))
+DEP = $(addprefix build/, $(SRC:.cpp=.d))
 CXXFLAGS=-I. -g -Wall -Wextra -Wno-unused-variable -Wno-unused-parameter
 
 all: p3d_gl.a
 
 -include $(DEP)
 
+# from scratch: ocean.o and renderer/ocean.o land under the same archive member name
 p3d_gl.a: $(OBJ)
+	rm -f $@
 	ar rcs $@ $^
 
 build/%.o: %.cpp
-	c++ -MMD $(CXXFLAGS) -c $< -o $@
-build/%.o: gl/%.cpp
-	c++ -MMD $(CXXFLAGS) -c $< -o $@
-build/%.o: renderer/%.cpp
-	c++ -MMD $(CXXFLAGS) -c $< -o $@
-build/%.o: lodepng/%.cpp
+	@mkdir -p $(dir $@)
 	c++ -MMD $(CXXFLAGS) -c $< -o $@

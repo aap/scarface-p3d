@@ -350,6 +350,25 @@ InitApp(void)
 		"uginbar_01_detail.p3d",
 	};
 
+	// The ocean. The game builds it from a script object out of OceanObject::OnInit
+	// (leak: ocean/oceanobject.cpp): one renderer::OceanRenderable_CreateInstance with
+	// the three texture names of `OceanTemplateDefault`, then the tuning template's
+	// setters. There is exactly one OceanObject in the whole game (z04's "Ocean"), and
+	// the viewer has no script objects, so the template's values are the defaults in
+	// pure3d::Ocean's constructor (re/notes/ocean.md §3).
+	renderer::gOcean = renderer::OceanRenderable_CreateInstance(
+		"skyTexture", "water_01.BMP", "Water_Ocean_Foam.tga", commonInv);
+	if(renderer::gOcean) {
+		renderer::gOcean->AddRef();
+		renderer::g_renderMgr->scenes[renderer::RenderManager::GAMEPLAY_SCENE]->AddRenderable(renderer::gOcean);
+		renderables.push_back(renderer::gOcean);
+		pure3d::Ocean *o = renderer::gOcean->GetOcean();
+		if(const char *e = getenv("P3D_SEALEVEL")) o->seaLevel = (float)atof(e);
+		if(const char *e = getenv("P3D_NOWAVES")) o->waves = atoi(e) == 0;
+		if(const char *e = getenv("P3D_NODETAIL")) o->detailPass = atoi(e) == 0;
+		if(const char *e = getenv("P3D_OCEANGRID")) o->projectedGrid = atoi(e) != 0;
+	}
+
 	// The game streams the map through art/levels/z04/streamgraph.p3d: the shells and
 	// details of the triggers around the camera (p3dview/streaming.cpp). P3D_STREAM=0,
 	// or no graph, loads the whole static list above instead.
