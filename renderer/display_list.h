@@ -101,6 +101,9 @@ public:
 
 	// ---- the named list renderers, in the order Render() calls them -------------
 	void RenderSky(void);					// retail: 0x459a00  46, 47
+	// retail: the shared body of RenderSky (0x459a00) and RenderCameraLocked76
+	// (0x459810): no culling, and a translation pushed under the node matrix
+	void RenderTranslatedList(i32 listID, const Matrix &translate, bool applyContainerFade);
 	void RenderLowLOD59(void);				// retail: 0x45d140  59
 	void RenderUnlitBlendAndLayered_36_42(void);		// retail: 0x45ccd0  36, 42
 	void RenderInstanced73(void);				// retail: 0x45a680  73

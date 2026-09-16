@@ -25,11 +25,21 @@ class PrimGroup : public DrawablePrimitive
 	u32 mVertexCount;
 	u32 mUnknown2;		// set from loader unk4
 	pddiPrimBuffer *mPrimBuffer;
+	// retail: DrawablePrimitive vslot 14, pushed in by the display list walks around
+	// the draw (notes/displaylist.md §4). Retail turns it into a shader alpha; we only
+	// honour the "completely gone" end of it, which is what the rainy sky box and a
+	// finished LOD cross-fade need.
+	float mFade;
+	// a copy of the COLOURLIST, so that the vertex colour animation can add its
+	// per-frame offsets to it instead of accumulating them
+	pddiColour *mBaseColours;
 public:
 	PrimGroup(u32 vertexFormat, u32 vertexCount);
+	~PrimGroup(void);
 
 	virtual u32 GetSomeMask(void) { return 1; }
 	virtual void Display(void);
+	virtual void SetFade(float fade) { mFade = fade; }
 	virtual Shader *GetShader(void) const { return mShader; }
 	virtual void SetShader(Shader *shader);
 	virtual bool IsLit(void);
@@ -37,6 +47,10 @@ public:
 
 	void SetPrimType(pddiPrimType primType) { mPrimType = primType; }
 	void SetPrimBuffer(pddiPrimBuffer *buf) { Assign(mPrimBuffer, buf); }
+	// the sky's vertex colour animation (re/notes/sky.md): remember the loaded colours
+	// and rewrite the vertex buffer's colour channel with base + offset
+	void SetBaseColours(const pddiColour *colours, u32 n);
+	void SetVertexColourOffsets(const pddiColour *offsets, u32 n);
 };
 
 class PrimGroupStreamed : public PrimGroup

@@ -12,12 +12,33 @@ using namespace core;
 using namespace content;
 
 
+// The vertex colour half of a mesh's "VRTXANIM": numFrames per-vertex colour OFFSETS
+// that the mesh's frame controller interpolates between and adds to the mesh's own
+// COLOURLIST. The sky box shapes use it to carry their two to six time of day colour
+// sets: the COLOURLIST is the night sky and frame 0 is all zeros, the day frames add
+// the blue back in (re/notes/sky.md). Retail runs it through a streamed prim group
+// whose vertices live in RAM; we rewrite the vertex buffer instead.
+class VertexColourAnim
+{
+public:
+	i32 numFrames;
+	i32 numVertices;
+	// [numFrames*numVertices], byte order as in the file's colour list (D3DCOLOR,
+	// i.e. b, g, r, unused)
+	pddiColour *offsets;
+
+	VertexColourAnim(i32 numFrames, i32 numVertices);
+	~VertexColourAnim(void);
+	pddiColour *GetFrame(i32 i) { return &offsets[i*numVertices]; }
+};
+
 class Geometry : public DrawableContainer
 {
 	// TODO: unknowns
 	bool isFading;
 	float fadeAmount;
 	// frame controller
+	VertexColourAnim *colourAnim;
 public:
 	enum {
 		MESH			= 0x10000,
@@ -57,10 +78,17 @@ public:
 
 		DEFORMVERTEXLIST	= 0x10022,
 		DEFORMNORMALLIST	= 0x10023,
+
+		// the "VRTXANIM" vertex animation of a mesh (re/notes/sky.md): a list of
+		// key frames, one chunk per key frame, and the per-vertex data itself
+		VERTEXANIM		= 0x121305,
+		VERTEXANIMFRAME		= 0x121306,
+		VERTEXANIMDATA		= 0x10F02,
 	};
 
 	CLASSNAME(Geometry)
 	Geometry(i32 nPrimGroup);
+	~Geometry(void);
 
 	virtual void Display(DisplayList *list, GameDrawableInfo *info);
 
@@ -68,6 +96,13 @@ public:
 	virtual void SetFadeAmount(float fade) { fadeAmount = fade; }
 	virtual bool IsFading(void) { return isFading; }
 	virtual float GetFadeAmount(void) { return fadeAmount; }
+
+	void SetColourAnim(VertexColourAnim *anim) { colourAnim = anim; }
+	i32 GetNumColourAnimFrames(void) { return colourAnim ? colourAnim->numFrames : 0; }
+	// interpolate between key frame floor(frame) and the next one (wrapping) and push
+	// the result into the first prim group's vertex buffer. retail does the same thing
+	// through a frame controller (re/notes/sky.md).
+	void SetColourAnimFrame(float frame);
 };
 
 class GeometryLoader : public SimpleChunkHandler

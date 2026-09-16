@@ -100,7 +100,17 @@ Implemented in the repo from these notes (2026-09-15, renderer:: restructured 20
     reference point, which only matters for plain (unprefixed) world geo now.
     Debug envs: P3D_ONLYMODEL=<substr> (render only those instance models), P3D_HIDELIST=a,b,c (hide display
     lists), P3D_DEBUGMODEL=<modelname> (print placements).
+  - renderer/sky.*: 0x08800002 SkyLoader -> SkyRenderable (notes/sky.md). Layers 28 (billboard
+    quad groups -> list 76) / 38 / 39, a 2x scale, no distance test; Display_List::RenderSky and
+    RenderCameraLocked76 translate their lists to the rendering camera like retail. billboard.*:
+    the 0x00017005/6/7/9 BillboardQuad(Group)/BillboardObject loader and a camera-facing quad
+    stream through pddi. The sky boxes' vertex colours are the NIGHT sky; the daylight comes from
+    the "VRTXANIM" vertex colour offsets (0x00121305/6 + 0x00010F02), which SkyRenderable::Update
+    drives from renderer::g_timeOfDay (P3D_TIMEOFDAY, 0..1, default 0.25).
   - primgroup.cpp: NORMALLIST was gated on PDDI_V_POSITION instead of PDDI_V_NORMAL (latent nil deref).
+    Prim groups with no index list are drawn with glDrawArrays (the sky boxes are bare triangle
+    strips), vertex-animated groups load their rest pose instead of being skipped, and an unlit
+    pddi shader is no longer modulated with the ambient light.
   - p3dview/explorer.cpp: imgui Explorer window — Files tab (every loaded inventory, objects grouped by class),
     Renderables tab (visibility checkboxes), World tab (the stream graph: regions > subzones > packages,
     '>' = camera inside, go / pin / glb buttons; glb runs re/p3d2gltf.py --zone/--region in the background

@@ -33,6 +33,13 @@ public:
 	LoadStream *BeginInset(void);
 	void EndInset(LoadStream *f);
 
+	// how much of the current chunk's own data is left --- the vertex animation frames
+	// carry no element count of their own
+	u32 GetDataRemaining(void) {
+		u32 end = chunkStack[stackTop].startPosition + chunkStack[stackTop].dataLength;
+		u32 pos = realFile->GetPosition();
+		return pos < end ? end - pos : 0;
+	}
 	void GetData(void *buf, u32 count, u32 sz = 1) { realFile->GetData(buf, count, sz); }
 	u8 GetU8(void) { return realFile->GetU8(); }
 	u16 GetU16(void) { return realFile->GetU16(); }

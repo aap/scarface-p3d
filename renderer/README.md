@@ -14,7 +14,7 @@ the reasoning behind them is in `re/notes/` (start with `displaylist.md`, then
 | `renderable.*` | `Renderable`, `DisplayListElement`, `DisplayListPrimitive` | "am I visible, and how faded" |
 | `display_list.*` | `Display_List`, `DisplayListNode` | the retained draw list, 84 buckets |
 | `view.*` | `Camera`, `View_Get/SetRenderingCamera`, `View_Get/SetCullingCamera` | where we look from, and the frustum |
-| `worldgeo.*`, `zonepkg.*`, `instance.*` | `WorldGeoRenderable`, `ZonePkgRenderable`, `InstanceRenderable` and their chunk loaders | the three renderable classes the viewer actually loads |
+| `worldgeo.*`, `zonepkg.*`, `instance.*`, `sky.*` | `WorldGeoRenderable`, `ZonePkgRenderable`, `InstanceRenderable`, `SkyRenderable` and their chunk loaders | the four renderable classes the viewer actually loads |
 
 * **`RenderManager`** is *not* a renderer. It owns 4 scenes, 2 canvases and (in retail) 12
   memory heaps, the time-of-day manager and the decal / skid-mark / tracer pools.
@@ -91,6 +91,36 @@ the element's bounding sphere surface instead of to the reference point. Retail'
 because the huge composites never reach the base; the plain world geo that does reach it in the
 viewer has an identity matrix and no `otherPosition`, so the point would be the world origin.
 
+## The sky
+
+`sky.*` is `renderer::SkyRenderable` (chunk `0x08800002`, typeMask 1) and its loader;
+`re/notes/sky.md` has the reversed chunk formats and the retail behaviour. The short
+version:
+
+* `Common.p3d` holds two of them, `("sky","sky")` and `("rainy_skybox","rainy_skybox")`.
+  The loader looks the composite up, gives every **billboard quad group** in it layer 28
+  and every other primitive layer 39 (or 38 when the name starts with `rainy_`), clears
+  `doDistanceTest` and sets the renderable's matrix to a uniform **2x scale**. The rainy
+  box is loaded already faded out (`SetToFadeOut(40)`) and goes into the RenderManager's
+  *secondary* sky slot; the weather code cross-fades the pair through
+  `Renderable::Display`'s `TYPE_SKY` branch.
+* Layer 39/38 are display lists **46 and 47**, drawn first of everything with z-test and
+  z-write off, fog off, and **translated to the rendering camera's x and z** (y stays 0),
+  so the sky turns with the camera but does not rise with it. Layer 28 is list **76**,
+  drawn near the end, translated to the camera's *full* position — that is the sun, the
+  sun flares and the stars, which sit at infinity. Neither walk culls per node.
+* `SkyRenderable::Update` is retail's throttle (every frame for the first second, then
+  every 15th) around one job: set every frame controller of the sky composite to
+  `numFrames * timeOfDay`. The only one we can drive is the sky boxes' vertex colour
+  animation, which is the one that matters — the meshes' own vertex colours are the
+  *night* sky and the animation adds the daylight back in. `renderer::g_timeOfDay` is
+  that 0..1 phase (`P3D_TIMEOFDAY`, default 0.25); `renderer::g_skyEnabled` is retail's
+  global on/off switch.
+* The billboard quad groups themselves are `pure3d::` (`billboard.h`/`.cpp`, chunk
+  `0x00017006`): a `BillboardObject` container whose single `BillboardQuadGroup`
+  primitive builds all its quads into one triangle stream every time it is drawn, facing
+  the camera.
+
 ## The 84 lists
 
 The `layer` (0..44) baked into each `DrawablePrimitive` at load time is a *material class*
@@ -151,6 +181,9 @@ out of `flip * view * proj`.
 No reflection pass, no occluders (`occlude::IsBoxVisible` is a hook that always says
 "visible"), no light sets, no stencil shadow volumes, no shader-mode extension
 (`ext(0x10b)`) and no hardware instancing — the eco props are drawn one placement at a
-time. The indoor/outdoor deferral of group (B) in `Render()` exists but
+time. The sky draws, but not everything on it moves: there are no frame controllers, so
+the sun's and the stars' `BillboardQuadGroupAnimationController` never runs, the cut-off
+cones that fade a flare out as you look away from it are parsed but not evaluated, and
+only the two ends of a primitive fade (0 and 1) are honoured, not the middle. The indoor/outdoor deferral of group (B) in `Render()` exists but
 `Display_List::cameraIndoors` is never set. `RenderManager::GetHeap` returns nil: there are
 no pools.

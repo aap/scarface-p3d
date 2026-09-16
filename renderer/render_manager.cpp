@@ -11,6 +11,7 @@
 //         GamePlayScene::Render           Display_List::Render
 
 #include "render_manager.h"
+#include "sky.h"
 #include "../pddi.h"
 
 #include <vector>
@@ -123,9 +124,13 @@ void
 GamePlayScene::AddRenderable(Renderable *r)
 {
 	Scene::AddRenderable(r);
-	// retail also hooks up building shadows (typeMask 0x100) and the sky (typeMask 1)
-	if(r->typeMask == Renderable::TYPE_SKY && g_renderMgr)
-		g_renderMgr->SetSky(r, false);
+	// retail also hooks up building shadows (typeMask 0x100). The sky goes into the
+	// primary slot or --- for the "rainy_" one, SkyRenderable +0x88 --- the secondary
+	// one, which is the pair the weather cross-fade works on.
+	if(r->typeMask == Renderable::TYPE_SKY && g_renderMgr) {
+		SkyRenderable *sky = dynamic_cast<SkyRenderable*>(r);
+		g_renderMgr->SetSky(r, sky && sky->isRainy);
+	}
 }
 
 // retail: renderer::GamePlayScene::Render 0x468aa0

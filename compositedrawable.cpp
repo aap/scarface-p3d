@@ -2,6 +2,7 @@
 #include "geometry.h"
 #include "skeleton.h"
 #include "shader.h"
+#include "billboard.h"
 
 namespace pure3d
 {
@@ -195,6 +196,10 @@ CompositeDrawableLoader::LoadObject(IRefCount **pObject, u32 *pUID, ChunkFile *f
 			DrawableContainer *drawable = nil;
 			if(type & 1)
 				drawable = inventory->Find<Geometry>(childName);
+			else if(type & 8)
+				// the sky's sun/flares/stars: chunk 0x00017006, registered
+				// under the group's name as a BillboardObject (billboard.cpp)
+				drawable = inventory->Find<BillboardObject>(childName);
 			// TODO: other types
 // need assert later
 //			assert(drawable);
