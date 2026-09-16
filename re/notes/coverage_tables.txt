@@ -1,0 +1,261 @@
+TOTAL 24258 functions, 3226284 code bytes
+
+BUCKET                bytes      %     funcs      %
+LEAK                1380614  42.8%     10976  45.2%
+MISSING-ENGINE      1001464  31.0%      7245  29.9%
+SHR-DERIVED          449594  13.9%      2956  12.2%
+THIRD-PARTY          394612  12.2%      3081  12.7%
+
+BUCKET         SUBSYSTEM                                   bytes      %   funcs
+SHR-DERIVED    atg/pure3d                                 395940  12.3%    2349
+THIRD-PARTY    CRT+STL+ActiveMark-wrapper                 340993  10.6%    2881
+LEAK           gameobject/ai                              256003   7.9%    2427
+LEAK           gameobject/hud                             235073   7.3%    1694
+LEAK           gameobject/character                       213864   6.6%    1224
+MISSING-ENGINE engine/render                              133150   4.1%     735
+LEAK           gameobject/aivehicle                       115463   3.6%     517
+LEAK           gameobject/vehicle                         102523   3.2%     782
+LEAK           gameobject/template                         94852   2.9%    1163
+LEAK           gameobject/spawnobject                      72570   2.2%     612
+MISSING-ENGINE game                                        71541   2.2%     484
+MISSING-ENGINE lib/fight                                   71534   2.2%     804
+MISSING-ENGINE engine/collision                            70679   2.2%     377
+LEAK           gameobject/stateprop                        67191   2.1%     531
+MISSING-ENGINE atg/ravenphysics                            64549   2.0%     186
+LEAK           gameobject/fighttree                        63536   2.0%     650
+MISSING-ENGINE engine/vehicle                              59395   1.8%     335
+MISSING-ENGINE atg/audio                                   54200   1.7%     601
+MISSING-ENGINE engine/UNCLASSIFIED                         51459   1.6%     448
+THIRD-PARTY    libpng+zlib                                 50595   1.6%     132
+MISSING-ENGINE engine/sound                                49555   1.5%     381
+SHR-DERIVED    atg/core                                    37253   1.2%     438
+MISSING-ENGINE engine/om                                   35702   1.1%     221
+LEAK           gameobject/camera                           31524   1.0%     178
+MISSING-ENGINE engine/resource                             31150   1.0%     192
+MISSING-ENGINE engine/database                             31059   1.0%     141
+MISSING-ENGINE engine/controller                           30261   0.9%     207
+MISSING-ENGINE engine/stream                               26193   0.8%     161
+LEAK           gameobject/render                           24841   0.8%     210
+LEAK           gameobject/worldgameplay                    24616   0.8%     173
+LEAK           gameobject/pause                            24281   0.8%     246
+MISSING-ENGINE engine/object                               23966   0.7%     335
+MISSING-ENGINE engine/character                            23819   0.7%     184
+MISSING-ENGINE engine/script                               23377   0.7%     330
+MISSING-ENGINE engine/pathfind                             23196   0.7%      81
+MISSING-ENGINE engine/nis                                  21107   0.7%     162
+MISSING-ENGINE engine/stateprop                            18847   0.6%     112
+MISSING-ENGINE engine/flow                                 17799   0.6%     147
+MISSING-ENGINE engine/frontend                             15546   0.5%     203
+MISSING-ENGINE engine/MANAGER?                             13482   0.4%      67
+LEAK           gameobject/load                             11081   0.3%      94
+LEAK           gameobject/sound                             8350   0.3%     123
+LEAK           gameobject/mission                           7703   0.2%      60
+MISSING-ENGINE engine/subtitle                              7170   0.2%      42
+SHR-DERIVED    atg/movie                                    5968   0.2%      55
+MISSING-ENGINE engine/memory                                5454   0.2%      68
+LEAK           gameobject/ocean                             4811   0.1%      58
+LEAK           gameobject/trigger                           4686   0.1%      68
+SHR-DERIVED    atg/container                                4625   0.1%      61
+LEAK           gameobject/fire                              4474   0.1%      45
+MISSING-ENGINE engine/pathfind/src                          4263   0.1%      25
+LEAK           gameobject/targeting                         3720   0.1%      23
+SHR-DERIVED    atg/content                                  3361   0.1%      24
+LEAK           gameobject/poimarkerobject                   3311   0.1%      29
+MISSING-ENGINE engine/trigger                               3257   0.1%      20
+THIRD-PARTY    CRT+STL-inlined                              3024   0.1%      68
+MISSING-ENGINE engine/sound/src/resource                    2966   0.1%      27
+MISSING-ENGINE engine/weapon                                2928   0.1%      24
+MISSING-ENGINE engine/sound/src/player                      2683   0.1%      14
+MISSING-ENGINE engine/resource/src                          2612   0.1%      25
+MISSING-ENGINE engine/scriptcontext                         2059   0.1%      24
+MISSING-ENGINE engine/savegame                              1762   0.1%      13
+LEAK           gameobject/graphanim                         1748   0.1%      13
+LEAK           gameobject/volumes                           1676   0.1%      11
+MISSING-ENGINE engine/fighttree                             1660   0.1%      32
+SHR-DERIVED    atg/math                                     1654   0.1%      16
+MISSING-ENGINE engine/render-occlusion                      1542   0.0%      10
+LEAK           gameobject/ground                            1208   0.0%      17
+SHR-DERIVED    atg/content/load/p3d                          793   0.0%      13
+MISSING-ENGINE engine/graph                                  694   0.0%      13
+
+--- evidence strength (bytes) ---
+  strong    1440245  44.6%
+  medium     982717  30.5%
+  weak       803322  24.9%
+  bucket           strong   medium     weak
+  MISSING-ENGINE   346025   352989   302450
+  THIRD-PARTY      390430        6     4176
+  LEAK             492033   485543   403038
+  SHR-DERIVED      211757   144179    93658
+
+--- distinct RTTI (vtable) classes by bucket: 2016 total ---
+  LEAK              961  47.7%
+  MISSING-ENGINE    771  38.2%
+  SHR-DERIVED       269  13.3%
+  THIRD-PARTY        15   0.7%
+
+--- share of the game/engine/SDK code only (third-party excluded, 2831672 bytes) ---
+  LEAK              1380614  48.8%
+  SHR-DERIVED        449594  15.9%
+  MISSING-ENGINE    1001464  35.4%
+
+--- 30 largest MISSING subsystems ---
+engine/render                              133150   4.1%    735 funcs
+game                                        71541   2.2%    484 funcs
+lib/fight                                   71534   2.2%    804 funcs
+engine/collision                            70679   2.2%    377 funcs
+atg/ravenphysics                            64549   2.0%    186 funcs
+engine/vehicle                              59395   1.8%    335 funcs
+atg/audio                                   54200   1.7%    601 funcs
+engine/UNCLASSIFIED                         51459   1.6%    448 funcs
+engine/sound                                49555   1.5%    381 funcs
+engine/om                                   35702   1.1%    221 funcs
+engine/resource                             31150   1.0%    192 funcs
+engine/database                             31059   1.0%    141 funcs
+engine/controller                           30261   0.9%    207 funcs
+engine/stream                               26193   0.8%    161 funcs
+engine/object                               23966   0.7%    335 funcs
+engine/character                            23819   0.7%    184 funcs
+engine/script                               23377   0.7%    330 funcs
+engine/pathfind                             23196   0.7%     81 funcs
+engine/nis                                  21107   0.7%    162 funcs
+engine/stateprop                            18847   0.6%    112 funcs
+engine/flow                                 17799   0.6%    147 funcs
+engine/frontend                             15546   0.5%    203 funcs
+engine/MANAGER?                             13482   0.4%     67 funcs
+engine/subtitle                              7170   0.2%     42 funcs
+engine/memory                                5454   0.2%     68 funcs
+engine/pathfind/src                          4263   0.1%     25 funcs
+engine/trigger                               3257   0.1%     20 funcs
+engine/sound/src/resource                    2966   0.1%     27 funcs
+engine/weapon                                2928   0.1%     24 funcs
+engine/sound/src/player                      2683   0.1%     14 funcs
+engine/resource/src                          2612   0.1%     25 funcs
+engine/scriptcontext                         2059   0.1%     24 funcs
+engine/savegame                              1762   0.1%     13 funcs
+engine/fighttree                             1660   0.1%     32 funcs
+engine/render-occlusion                      1542   0.0%     10 funcs
+engine/graph                                  694   0.0%     13 funcs
+engine/script/jdscript                        485   0.0%      8 funcs
+engine/statemachine                           363   0.0%      6 funcs
+
+--- 40 largest MISSING classes ---
+   38489  atg/ravenphysics                   (nearby)
+   29758  game                               CVManager
+   26480  engine/collision                   (nearby)
+   19855  engine/vehicle                     BoatLocomotion
+   19318  engine/render                      renderer::RenderFlowClient
+   17476  engine/sound                       SoundManager::SoundFlowClient
+   17278  game                               (nearby)
+   17111  engine/pathfind                    PathManager::PathManagerFlowClient
+   16205  engine/resource                    ScriptFileHandler
+   15525  engine/collision                   CollisionManager::CollisionManagerFlowClient
+   14439  engine/render                      renderer::?
+   14401  engine/render                      (module-range)
+   14304  engine/controller                  (nearby)
+   13506  engine/flow                        SaveGameManagerFlowClient
+   13094  engine/render                      renderer::GamePlayScene
+   12766  engine/UNCLASSIFIED                (nearby)
+   12378  atg/ravenphysics                   ravenphysics::BroadPhaseDetectorSweepAndPrune
+   11925  engine/om                          om::MetaAttribScalar<float>
+   11464  engine/vehicle                     AirplaneLocomotion
+   10989  engine/nis                         NISManager
+   10688  lib/fight                          (module-range)
+   10602  engine/stream                      StreamManagerFlowClient
+   10510  engine/database                    DataBroker
+    9849  engine/sound                       (nearby)
+    9707  engine/render                      (nearby)
+    9617  engine/render                      renderer::Display_List
+    9585  engine/character                   AnimationAction
+    9227  lib/fight                          (nearby)
+    8918  engine/controller                  ControllerManager::ControllerFlowClient
+    8720  atg/ravenphysics                   content::LoadInventory::DynamicCaster<ravenphysics::CollisionObject>
+    8376  engine/om                          (nearby)
+    8310  engine/stateprop                   StatePropManagerFlowClient
+    8204  engine/MANAGER?                    GameLoadingManager
+    8153  engine/vehicle                     (nearby)
+    8051  engine/character                   (nearby)
+    7732  atg/audio                          (nearby)
+    7697  atg/audio                          audio::SeqActionClip
+    7687  game                               HUDPresentationState
+    7634  engine/stream                      (nearby)
+    7547  engine/frontend                    (nearby)
+
+--- 25 largest LEAK classes ---
+  114503  gameobject/character       CharacterObject                    impl
+   55366  gameobject/aivehicle       CarAIBehavior                      impl
+   51009  gameobject/hud             (module-range)                     HEADER-ONLY
+   44296  gameobject/ai              (module-range)                     HEADER-ONLY
+   34347  gameobject/vehicle         ActiveVehicleObject                impl
+   33053  gameobject/character       (nearby)                           HEADER-ONLY
+   30473  gameobject/ai              (nearby)                           HEADER-ONLY
+   26645  gameobject/spawnobject     (module-range)                     HEADER-ONLY
+   22633  gameobject/stateprop       (nearby)                           HEADER-ONLY
+   22406  gameobject/vehicle         (nearby)                           HEADER-ONLY
+   22302  gameobject/character       (module-range)                     HEADER-ONLY
+   20015  gameobject/hud             (nearby)                           HEADER-ONLY
+   19871  gameobject/aivehicle       BoatAIBehaviour                    impl
+   19650  gameobject/vehicle         ActiveWheeledVehicleObject         impl
+   19351  gameobject/character       DWHenchman                         impl
+   15462  gameobject/stateprop       StatePropObject                    impl
+   14047  gameobject/spawnobject     VehicleSpawnObject                 impl
+   13380  gameobject/aivehicle       (nearby)                           HEADER-ONLY
+   13096  gameobject/aivehicle       (module-range)                     HEADER-ONLY
+   12290  gameobject/character       WallCover                          impl
+   11992  gameobject/camera          GenericVehicleCamera               impl
+   11544  gameobject/vehicle         (module-range)                     HEADER-ONLY
+   10500  gameobject/template        (nearby)                           HEADER-ONLY
+   10388  gameobject/worldgameplay   MetaGameManager::MetaGameManagerFlowClient HEADER-ONLY
+   10152  gameobject/hud             HUDTapePlayer                      impl
+
+--- most-included missing headers (leak needs these to compile) ---
+  147  engine/assert/assertmsg.hpp
+  145  engine/script/scriptinterface.hpp
+  108  engine/util/stringutil.hpp
+  105  engine/object/scriptobject.hpp
+   95  engine/script/jdscript/console.h
+   90  engine/script/registeredfunction.hpp
+   87  engine/util/scriptobjectpointer.hpp
+   86  engine/overlay/overlaymanager.hpp
+   73  engine/sound/soundmanager.hpp
+   68  game/cvmanager.hpp
+   68  engine/frontend/fegameobject.hpp
+   64  engine/render/renderer.hpp
+   63  engine/collision/collisionmanager.hpp
+   59  engine/flow/flowmanager.hpp
+   56  engine/object/gamegroup.hpp
+   45  math/vector.hpp
+   42  engine/memory/memoryblockallocator.hpp
+   39  engine/object/gameset.hpp
+   38  engine/character/character.hpp
+   37  engine/aigadgets/aiMacros.hpp
+   34  container/arraydynamic.hpp
+   33  engine/resource/resourcemanager.hpp
+   33  engine/database/dbutil.hpp
+   31  engine/util/mathutil.hpp
+   30  engine/memory/memorymanager.hpp
+   29  engine/object/gamesimobject.hpp
+   29  engine/script/script.hpp
+   29  engine/object/template.hpp
+   28  engine/object/gamesetobject.hpp
+   28  engine/assert/programmingbycontract.hpp
+   28  game/presentationmanager.hpp
+   27  engine/database/subscriberinterface.hpp
+   26  engine/collision/rayintersectionresult.hpp
+   26  engine/pathfind/pathmanager.hpp
+   24  engine/object/gameobject.hpp
+   24  engine/frontend/frontendmanager.hpp
+   23  engine/debug/performancetracker.hpp
+   23  engine/character/animation/characteranimation.hpp
+   22  math/math.hpp
+   21  pure3d/camera/vectorcamera.hpp
+   20  engine/script/scriptscheduler.hpp
+   19  engine/database/databroker.hpp
+   19  engine/controller/actionmap.hpp
+   18  engine/aigadgets/smartposition.hpp
+   17  engine/controller/controllermanager.hpp
+
+missing include families: {'engine': 205, 'pure3d': 33, 'game': 14, 'container': 11, 'ravenphysics': 10, 'math': 9, 'core': 8, 'fight': 7, 'content': 4, 'script': 3, 'object': 2, 'audio': 1}
+distinct missing headers: 307 (total 3088 include sites)
+
+leak classes: 931 defined, 776 with a .cpp impl

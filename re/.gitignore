@@ -1,0 +1,11 @@
+venv/
+scarface_unpacked.bin
+seg_*.bin
+xrefs_to.txt
+idb_cmts.txt
+shot_*.png
+.cov_cache.pkl
+.cov_report.json
+.class_index.json
+allstrings.txt
+__pycache__/
