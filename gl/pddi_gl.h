@@ -272,6 +272,8 @@ class glState
 	i32 u_lightColour1;
 	i32 u_debug;
 	i32 u_vertexFade;
+	i32 u_lit;
+	bool isLit;			// the shader's PDDI_SP_ISLIT
 	Vector4 vertexFade;		// x: fade start, y: fade end (m from the camera), z: enable
 	u32 whiteTex;			// bound when a shader has no texture
 
@@ -301,6 +303,8 @@ class glContext : public pddiContext
 	Matrix worldMatrix[20];
 	Matrix viewMatrix;
 	Matrix projMatrix;
+	bool zWrite;
+	bool zTest;
 public:
 	glContext(void);
 
@@ -319,7 +323,13 @@ public:
 	virtual void PopDebugName(void);
 
 	virtual void DrawPrimBuffer(pddiShader *mat, pddiPrimBuffer *buf);
-	virtual void SetZWrite(bool enable) { glDepthMask(enable ? GL_TRUE : GL_FALSE); }
+	virtual void SetZWrite(bool enable) { zWrite = enable; glDepthMask(enable ? GL_TRUE : GL_FALSE); }
+	virtual bool GetZWrite(void) { return zWrite; }
+	virtual void SetZTest(bool enable) {
+		zTest = enable;
+		if(enable) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+	}
+	virtual bool GetZTest(void) { return zTest; }
 	virtual void SetColourWrite(bool r, bool g, bool b, bool a) {
 		glColorMask(r ? GL_TRUE : GL_FALSE, g ? GL_TRUE : GL_FALSE,
 		            b ? GL_TRUE : GL_FALSE, a ? GL_TRUE : GL_FALSE);

@@ -45,6 +45,8 @@ glContext::glContext(void)
 {
 	worldSP = 0;
 	worldMatrix[worldSP].Identity();
+	zWrite = true;
+	zTest = true;
 
 	state = new glState;
 }
@@ -55,6 +57,8 @@ glContext::Begin(void)
 	glPolygonMode(GL_FRONT_AND_BACK, pddiDebug.wireframe ? GL_LINE : GL_FILL);
 	worldSP = 0;
 	worldMatrix[worldSP].Identity();
+	SetZWrite(true);
+	SetZTest(true);
 }
 
 void
@@ -145,6 +149,8 @@ glState::glState(void)
 	u_lightColour1 = uniformRegistry.Register("u_lightColour1", UNIFORM_VEC4);
 	u_debug = uniformRegistry.Register("u_debug", UNIFORM_VEC4);
 	u_vertexFade = uniformRegistry.Register("u_vertexFade", UNIFORM_VEC4);
+	u_lit = uniformRegistry.Register("u_lit", UNIFORM_VEC4);
+	isLit = true;
 	vertexFade = Vector4(0.0f, 0.0f, 0.0f, 0.0f);
 	whiteTex = 0;
 }
@@ -164,6 +170,8 @@ glState::Flush(void)
 	Vector4 dbg(pddiDebug.noLighting ? 1.0f : 0.0f, pddiDebug.noVertexColours ? 1.0f : 0.0f, pddiDebug.noTextures ? 1.0f : 0.0f, 0.0f);
 	uniformRegistry.SetUniform(u_debug, &dbg);
 	uniformRegistry.SetUniform(u_vertexFade, &vertexFade);
+	Vector4 lit(isLit ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
+	uniformRegistry.SetUniform(u_lit, &lit);
 	uniformRegistry.Flush();
 }
 
@@ -212,6 +220,9 @@ glState::SetAlphaBlend(pddiBlendMode mode)
 void
 glState::SetMaterial(bool isLit, bool twoSided, const MaterialColours &colours)
 {
+	// pddi shades an unlit surface as texture*vertexColour, with no light at all ---
+	// which is what the sky boxes need: their vertex colours ARE the sky
+	this->isLit = isLit;
 	Vector4 colv;
 	colv = convCol(colours.ambient);
 	uniformRegistry.SetUniform(u_matAmbient, &colv);
