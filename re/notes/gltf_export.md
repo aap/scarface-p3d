@@ -6,13 +6,27 @@ It reuses the chunk walker of `re/p3dwalk.py` and the placement decoder of `re/i
 and needs nothing but `numpy`.
 
 ```
-python3 re/p3d2gltf.py --out world.glb [--region sbeachn | --files a.p3d b.p3d | --all]
+python3 re/p3d2gltf.py --list                                   # the world, as the game organises it
+python3 re/p3d2gltf.py --out world.glb [--zone sbeachn_01_shell | --region nbeach | --at X Z
+                                        | --files a.p3d b.p3d | --all]
                        [--no-instances] [--lod] [--flip-x] [--no-support] [-v]
 ```
 
+Start with `--list`. The map is streamed through `art/levels/z04/streamgraph.p3d`
+(re/notes/streaming.md): polygon triggers tagged with a *subzone* name, each listing the
+packages the game keeps resident there. `*_region.p3d` files are shader / eco-prop
+libraries and contain **no geometry** — `--region sbeach` used to match only those and
+produced an empty file; now it means "every trigger that uses the `sbeach` region
+libraries", and an export that yields nothing is an error. Extract the graph once with
+`python3 re/rcf.py <cement.rcf> extract assets streamgraph`.
+
 | flag | meaning |
 |---|---|
-| `--region <name>` | every `<name>_*.p3d` plus the `<prefix>_region*.p3d` whose prefix `<name>` starts with (so `sbeachn` also pulls `sbeach_region*.p3d`) |
+| `--list` | print regions and subzones from the stream graph (bounds, package counts) and exit |
+| `--zone <tag>…` | the Shell + Detail packages of every trigger tagged `<tag>` (e.g. `sbeachn_01_shell`): exactly what the game has loaded while you stand there |
+| `--region <name>` | every trigger that loads `<name>_region` / `<name>_region_d`: `nbeach`, `sbeach`, `havana`, `downtown`, `industrial`, `tonyisland`, `lobst`, `fountainrock`, `bsandtanker`, `tranq` …; `miami` / `islands` select by the Global_S backdrop. Without `streamgraph.p3d` it falls back to matching `<name>_*.p3d` file names |
+| `--at X Z` | the triggers containing native (X, Z) — the explorer prints native coordinates, p3dview shows −X |
+| `--streamgraph P3D` | where `streamgraph.p3d` is (default: `<pkgdir>/../../art/levels/z04/`, or `<pkgdir>/`) |
 | `--files …` | explicit package list (bare names are resolved in `--pkgdir`) |
 | `--all` | every `.p3d` in `--pkgdir` (default `assets/packages/z04`) |
 | `--no-instances` | skip the eco-prop / `instanceobject` placements |
@@ -163,8 +177,9 @@ the binary chunk is streamed to a temp file, so nothing is held twice.
 
 | run | packages | world geos | placements | meshes / prims / tris | materials / textures | load+export | `.glb` |
 |---|---|---|---|---|---|---|---|
-| `--region sbeachn` | 13 + 34 support | 38 | 6756 (96 models) | 1103 / 4645 / 199 676 | 394 / 197 | 0.2 s + 0.5 s | 23.1 MB |
-| `--region sbeachs` | 10 + 32 support | 29 | 4370 (73 models) | 552 / 2471 / 158 941 | 331 / 168 | 0.1 s + 0.3 s | 16.8 MB |
+| `--zone sbeachn_01_shell` | 13 + 34 support | 38 | 6756 (96 models) | 1103 / 4645 / 199 676 | 394 / 197 | 0.2 s + 0.5 s | 24.4 MB |
+| `--region sbeach` | 29 + 34 support | 89 | 15 014 (136 models) | 1768 / 8280 / 473 360 | 825 / 382 | 0.3 s + 1.1 s | 51.5 MB |
+| `--region miami` | all Miami subzones | | | | | | 126 MB |
 | `--all` | 220 | 397 | 45 698 (426 models) | 5614 / 24 639 / 1 983 844 | 2938 / 1546 | 0.6 s + 2.9 s | 181 MB |
 
 `--all` peaks at ~570 MB RSS (mostly mapped pages) for 290 MB of packages. The 426

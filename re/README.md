@@ -25,7 +25,12 @@ Helpers
   python3 p3dhex.py <file> <chunkid> <n>          hexdump first n chunks of that id
   python3 p3dblock.py <file> <classname|objname>  decode a 0x09900190 script-object block
   python3 rcf.py <cement.rcf> list|extract <outdir> [substr]
-  python3 p3d2gltf.py --out world.glb [--region sbeachn|--files a.p3d b.p3d|--all]
+  python3 streamgraph.py [triggers|zones|regions|at X Z|json]
+                                 decode art/levels/z04/streamgraph.p3d: the 297 polygon stream
+                                 triggers that say which packages are resident where
+                                 (notes/streaming.md = how the world is organised)
+  python3 p3d2gltf.py --list     the world as the stream graph organises it (regions, subzones)
+  python3 p3d2gltf.py --out world.glb [--zone sbeachn_01_shell|--region nbeach|--at X Z|--files ..|--all]
                       [--no-instances] [--lod] [--flip-x]
                                  export the map (world geo + eco-prop instances + materials
                                  with embedded PNGs) as glTF 2.0 -> Blender (notes/gltf_export.md)

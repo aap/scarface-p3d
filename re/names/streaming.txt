@@ -1,0 +1,5 @@
+# streaming — StreamTriggerLoader (chunk 0x08800101 in art/levels/z04/streamgraph.p3d).
+# PC retail, unpacked-image VAs.  See re/notes/streaming.md.
+004b9440 StreamTriggerLoader::ctor
+004b9460 StreamTriggerLoader::LoadObject ?
+0073be44 StreamTriggerLoader::vftable

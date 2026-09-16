@@ -948,7 +948,8 @@ def support_packages(pkgdir, already):
 
 
 def region_packages(pkgdir, region):
-    """<region>_*.p3d plus every <prefix>_region*.p3d whose prefix the region starts with."""
+    """Fallback without a stream graph: <region>_*.p3d plus every <prefix>_region*.p3d
+    whose prefix the region starts with."""
     all_ = sorted(os.listdir(pkgdir))
     low = region.lower()
     files = [f for f in all_ if f.lower().startswith(low + '_') and f.endswith('.p3d')]
@@ -962,6 +963,95 @@ def region_packages(pkgdir, region):
     return [os.path.join(pkgdir, f) for f in files + extra]
 
 
+# -- the stream graph -------------------------------------------------------
+# art/levels/z04/streamgraph.p3d is what the retail StreamManager walks: polygon triggers
+# tagged with a subzone name, each listing the packages to keep resident (see
+# re/streamgraph.py and re/notes/streaming.md).  It is the only authoritative answer to
+# "which packages make up <place>", so the selectors below use it when it is there.
+def load_streamgraph(path, pkgdir):
+    import streamgraph
+    cands = [path] if path else [
+        os.path.join(pkgdir, 'streamgraph.p3d'),
+        os.path.join(pkgdir, '..', '..', 'art', 'levels', 'z04', 'streamgraph.p3d'),
+        os.path.join(HERE, '..', 'assets', 'art', 'levels', 'z04', 'streamgraph.p3d')]
+    for c in cands:
+        if c and os.path.exists(c):
+            return streamgraph.StreamGraph(c)
+    return None
+
+
+def pkgdir_index(pkgdir):
+    """lower-case name (without .p3d) -> path; the graph names are all lower case"""
+    return dict((f[:-4].lower(), os.path.join(pkgdir, f))
+                for f in os.listdir(pkgdir) if f.lower().endswith('.p3d'))
+
+
+def triggers_to_files(triggers, pkgdir, quiet=False):
+    """the Shell + Detail packages of a set of triggers, resolved in pkgdir"""
+    idx = pkgdir_index(pkgdir)
+    names = set()
+    for t in triggers:
+        names.update(t.slot('Shell')); names.update(t.slot('Detail'))
+    files, missing = [], []
+    for n in sorted(names):
+        if n in idx:
+            files.append(idx[n])
+        else:
+            missing.append(n)
+    if missing and not quiet:
+        print('not in %s: %s' % (pkgdir, ' '.join(missing)), file=sys.stderr)
+    return files
+
+
+def graph_region_triggers(graph, region):
+    """every trigger that has <region>_region / <region>_region_d in a slot; 'miami' and
+    'islands' select by the Global_S library instead"""
+    r = region.lower()
+    if r in ('miami', 'islands'):
+        return [t for t in graph.triggers if any(p.lower() == r + '_lod' for p in t.slot('Global_S'))]
+    want = (r + '_region', r + '_region_d')
+    return [t for t in graph.triggers if any(p.lower() in want for p, s in t.loads)]
+
+
+def graph_zone_triggers(graph, zones):
+    want = set(z.lower() for z in zones)
+    return [t for t in graph.triggers if t.tag.lower() in want]
+
+
+def print_world(graph, pkgdir):
+    """--list: the world as the streaming graph organises it"""
+    idx = pkgdir_index(pkgdir)
+    print('%s: %d triggers, %d packages declared\n' % (graph.path, len(graph.triggers), len(graph.packages)))
+    print('Global libraries (Global_S): miami_lod (the city), islands_lod (the islands)')
+    print('Regions (Region_S/_D = shader + eco-prop libraries; --region <name>):')
+    regs = collections.defaultdict(lambda: {'zones': set(), 'pk': set(), 'n': 0})
+    for t in graph.triggers:
+        for p, s in t.loads:
+            pl = p.lower()
+            if s.lower() in ('region_s', 'region_d') and (pl.endswith('_region') or pl.endswith('_region_d')):
+                r = pl[:-len('_region_d')] if pl.endswith('_region_d') else pl[:-len('_region')]
+                regs[r]['zones'].add(t.tag); regs[r]['pk'].update(t.slot('Shell') + t.slot('Detail')); regs[r]['n'] += 1
+    for r in sorted(regs):
+        e = regs[r]
+        print('  %-14s %3d triggers %3d subzones %3d packages' % (r, e['n'], len(e['zones']), len(e['pk'])))
+    print('\nSubzones (trigger tags; --zone <tag> exports what the game has loaded there):')
+    zones = graph.zones()
+    for tag in sorted(zones, key=lambda k: (zones[k]['region'] or '~', k)):
+        if not tag:
+            continue
+        e = zones[tag]
+        xs, zs = [], []
+        for t in e['triggers']:
+            x0, x1, z0, z1 = t.bbox(); xs += [x0, x1]; zs += [z0, z1]
+        have = sum(1 for p in e['shells'] | e['details'] if p in idx)
+        print('  %-26s %-13s %2d triggers  x[%6.0f %6.0f] z[%6.0f %6.0f]  %2d shells %2d details%s' %
+              (tag, e['region'] or '-', len(e['triggers']), min(xs), max(xs), min(zs), max(zs),
+               len(e['shells']), len(e['details']),
+               '' if have == len(e['shells'] | e['details']) else '  (%d missing in pkgdir)' % (len(e['shells'] | e['details']) - have)))
+    print('\nCoordinates are native Pure3D (X is mirrored on screen in p3dview; --flip-x negates it).')
+    print('Examples:  --zone sbeachn_01_shell   --region nbeach   --at 760 -247   --region miami')
+
+
 def all_packages(pkgdir):
     return [os.path.join(pkgdir, f) for f in sorted(os.listdir(pkgdir)) if f.endswith('.p3d')]
 
@@ -971,10 +1061,25 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--out', default='world.glb', help='output .glb or .gltf')
-    ap.add_argument('--region', help='e.g. sbeachn, havana, downtown, ind')
+    ap.add_argument('--list', action='store_true',
+                    help='print the world organisation from the stream graph (regions, subzones) and exit')
+    ap.add_argument('--zone', nargs='+', metavar='TAG',
+                    help='subzone trigger tag(s), e.g. sbeachn_01_shell: export the Shell + Detail '
+                         'packages the game has resident there (see --list)')
+    ap.add_argument('--region', metavar='NAME',
+                    help='a region library name from --list: sbeach, nbeach, havana, downtown, '
+                         'industrial, tonyisland, lobst, fountainrock, bsandtanker, tranq ...; '
+                         'also miami / islands for everything under one Global_S library. '
+                         'Without a stream graph this falls back to a file-name prefix match.')
+    ap.add_argument('--at', nargs=2, type=float, metavar=('X', 'Z'),
+                    help='export what the game loads for a player standing at native X,Z '
+                         '(p3dview shows -X; the explorer prints native coordinates)')
     ap.add_argument('--files', nargs='+', help='explicit package list')
     ap.add_argument('--all', action='store_true', help='every package in the zone dir')
     ap.add_argument('--pkgdir', default=os.path.join(HERE, '..', 'assets', 'packages', 'z04'))
+    ap.add_argument('--streamgraph', metavar='P3D',
+                    help='art/levels/z04/streamgraph.p3d (default: looked up next to pkgdir); '
+                         'extract it with: python3 re/rcf.py <cement.rcf> extract assets streamgraph')
     ap.add_argument('--no-instances', dest='instances', action='store_false',
                     help='skip the eco-prop / instanceobject placements')
     ap.add_argument('--lod', action='store_true',
@@ -991,14 +1096,43 @@ def main():
     args = ap.parse_args()
 
     pkgdir = os.path.normpath(args.pkgdir)
+    graph = load_streamgraph(args.streamgraph, pkgdir)
+    if args.list:
+        if not graph:
+            ap.error('no streamgraph.p3d found; extract it with: python3 re/rcf.py <cement.rcf> extract assets streamgraph')
+        print_world(graph, pkgdir)
+        return 0
     if args.files:
         files = [f if os.path.sep in f else os.path.join(pkgdir, f) for f in args.files]
+    elif args.zone:
+        if not graph:
+            ap.error('--zone needs streamgraph.p3d (see --streamgraph)')
+        trig = graph_zone_triggers(graph, args.zone)
+        if not trig:
+            ap.error('no trigger tagged %s; try --list' % ' '.join(args.zone))
+        files = triggers_to_files(trig, pkgdir)
+    elif args.at:
+        if not graph:
+            ap.error('--at needs streamgraph.p3d (see --streamgraph)')
+        trig = graph.at(args.at[0], args.at[1])
+        if not trig:
+            ap.error('no stream trigger contains (%g, %g); try --list' % tuple(args.at))
+        print('at (%g, %g): %s' % (args.at[0], args.at[1], ' '.join(sorted(set(t.tag for t in trig)))))
+        files = triggers_to_files(trig, pkgdir)
     elif args.region:
-        files = region_packages(pkgdir, args.region)
+        if graph:
+            trig = graph_region_triggers(graph, args.region)
+            if not trig:
+                ap.error('no region library %s_region in the stream graph; --list shows the names' % args.region)
+            files = triggers_to_files(trig, pkgdir)
+        else:
+            print('no streamgraph.p3d: matching file names %s_*.p3d instead (extract the graph with '
+                  'python3 re/rcf.py <cement.rcf> extract assets streamgraph)' % args.region, file=sys.stderr)
+            files = region_packages(pkgdir, args.region)
     elif args.all:
         files = all_packages(pkgdir)
     else:
-        ap.error('one of --region, --files or --all is required')
+        ap.error('one of --list, --zone, --region, --at, --files or --all is required')
     if not files:
         ap.error('no packages matched')
     support = []
@@ -1034,10 +1168,18 @@ def main():
                        else 'X negated w.r.t. native Pure3D (right handed, as on screen)',
         'uv': 'V negated (the engine samples at (u,-v))',
     }
+    s = ex.stats
+    if s['worldGeos'] == 0 and s['placements'] == 0:
+        try:
+            os.remove(out + '.tmpbin')
+        except OSError:
+            pass
+        sys.exit('nothing to export: the selected packages hold no world geometry or placements '
+                 '(%s). Regions are shader/eco-prop libraries, the map lives in *_shell / '
+                 '*_detail subzone packages: run with --list.' % ', '.join(db.packages[:6]))
     w.finish(out)
     t2 = time.time()
 
-    s = ex.stats
     print('exported %d world geos, %d placements of %d models, %d meshes / %d primitives / '
           '%d triangles, %d materials, %d textures in %.1fs'
           % (s['worldGeos'], s['placements'], s['instanceModels'], s['meshes'],
