@@ -54,10 +54,29 @@ RegisterShapes(content::LoadInventory *inv)
 		renderer::RegisterInstanceShape(geos[i]);
 }
 
+const char *rcfPath;	// -rcf <path> (main.cpp)
+
+// Every file name the viewer loads is a cement path ("packages/z04/Common.p3d"), so it
+// comes either out of the game's cement.rcf or, if none is mounted, out of the extracted
+// ../assets tree (content::OpenContentFile in rcf.cpp does the resolving).
+static void
+MountContent(void)
+{
+	const char *tries[] = { rcfPath, getenv("P3D_RCF"), "cement.rcf", "../cement.rcf" };
+	for(u32 i = 0; i < nelem(tries); i++)
+		if(content::MountRCF(tries[i]))
+			break;
+	if(content::MountedRCF() == nil)
+		printf("no cement.rcf (-rcf <path> or $P3D_RCF): loading from ../assets\n");
+	content::AddContentRoot("../assets");
+}
+
 // just some pure3d shit for now
 void
 InitApp(void)
 {
+	MountContent();
+
 	pure3d::InitDevice();
 	// retail: renderer::Init (0x465120) makes the RenderManager and calls Init, which
 	// builds the four scenes; GamePlayScene's ctor makes the Display_List.
@@ -142,10 +161,15 @@ InitApp(void)
 	};
 
 	content::LoadInventory *commonInv = nil;
+	u32 libStart = SDL_GetTicks();
 	for(u32 i = 0; i < nelem(commonfiles); i++) {
 		char path[256];
-		sprintf(path, "../assets/packages/z04/%s", commonfiles[i]);
+		sprintf(path, "packages/z04/%s", commonfiles[i]);
 		content::LoadInventory *tmp = content::loadManager->LoadFile(path, commonInv);
+		if(tmp == nil) {
+			fprintf(stderr, "cannot load %s --- wrong -rcf archive, or no ../assets tree?\n", path);
+			continue;
+		}
 		tmp->SetParent(commonInv);
 		commonInv = tmp;
 		RegisterShapes(tmp);
@@ -161,6 +185,7 @@ InitApp(void)
 			renderables.push_back(rs[j]);
 		}
 	}
+	printf("common libraries: %u files, %u ms\n", (u32)nelem(commonfiles), SDL_GetTicks() - libStart);
 
 	static const char *mapfiles[] = {
 		"DevilsCay_01_shell.p3d",

@@ -7,6 +7,7 @@
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_opengl3.h"
 #include <stdio.h>
+#include <string.h>
 #include <SDL.h>
 #if defined(IMGUI_IMPL_OPENGL_ES2)
 #include <SDL_opengles2.h>
@@ -16,9 +17,31 @@
 
 #include "p3dview.h"
 
-// Main code
-int main(int, char**)
+// p3dview.cpp: the cement archive everything is loaded from
+extern const char *rcfPath;
+
+static void
+Usage(const char *argv0)
 {
+	printf("usage: %s [-rcf <cement.rcf>]\n"
+	       "  -rcf <path>   the game's cement.rcf (default: $P3D_RCF, ./cement.rcf,\n"
+	       "                ../cement.rcf; without one, the extracted ../assets tree)\n"
+	       "  see p3dview/README.md for the keys and the P3D_* environment variables\n",
+	       argv0);
+}
+
+// Main code
+int main(int argc, char **argv)
+{
+    for(int i = 1; i < argc; i++) {
+        if(strcmp(argv[i], "-rcf") == 0 && i+1 < argc)
+            rcfPath = argv[++i];
+        else {
+            Usage(argv[0]);
+            return strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0 ? 0 : 1;
+        }
+    }
+
     // Setup SDL
     // (Some versions of SDL before <2.0.10 appears to have performance/stalling issues on a minority of Windows systems,
     // depending on whether SDL_INIT_GAMECONTROLLER is enabled or disabled.. updating to the latest version of SDL is recommended!)

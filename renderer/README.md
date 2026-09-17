@@ -1,7 +1,8 @@
 # `renderer/` — the retail render spine in code
 
 This directory is a reimplementation of Scarface's `renderer::` namespace, named after the
-retail PC classes and methods. Every non-obvious function carries a
+retail PC classes and methods (`p3dview/README.md` is how to *run* the thing: the game's
+`cement.rcf`, the keys and the `P3D_*` environment). Every non-obvious function carries a
 `// retail: renderer::Foo::Bar 0x4xxxxx` comment; the addresses are unpacked-image VAs and
 the reasoning behind them is in `re/notes/` (start with `displaylist.md`, then
 `rendercore.md` and `renderable_classes.md`; `re/names/*.txt` are the name lists).

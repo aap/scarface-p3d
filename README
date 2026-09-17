@@ -3,4 +3,12 @@ This is mostly a dump of some code, it's not polished or anything.
 I can sort of render the raw map with OpenGL but sorting is still a problem.
 Files are not included. Only PC files supported right now.
 
+The viewer reads the game's data straight out of cement.rcf, so nothing has to be
+unpacked: make -f Makefile.gl && make -C p3dview, then
+
+	cd p3dview && ./p3dview -rcf /path/to/Scarface/cement.rcf
+
+See p3dview/README.md for the controls and the environment variables, and
+renderer/README.md for what draws the frame.
+
 The fake pddi backend is no longer functional. I only used it early in development.

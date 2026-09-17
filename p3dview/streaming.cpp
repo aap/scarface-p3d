@@ -17,10 +17,12 @@
 #define nil nullptr
 #endif
 
-static const char *pkgdir = "../assets/packages/z04";
+// cement paths: they resolve inside the mounted cement.rcf, or under a content root
+// (../assets) when there is none --- see content::OpenContentFile (rcf.cpp)
+static const char *pkgdir = "packages/z04";
 static const char *graphPaths[] = {
-	"../assets/art/levels/z04/streamgraph.p3d",
-	"../assets/packages/z04/streamgraph.p3d",
+	"art/levels/z04/streamgraph.p3d",
+	"packages/z04/streamgraph.p3d",
 };
 
 std::vector<Package*> packages;
@@ -170,32 +172,48 @@ StreamingInit(content::LoadInventory *resolveInv)
 {
 	resolver = resolveInv;
 	for(u32 i = 0; i < sizeof(graphPaths)/sizeof(graphPaths[0]); i++) {
-		FILE *f = fopen(graphPaths[i], "rb");
-		if(f == nil) continue;
-		fclose(f);
+		if(!content::ContentFileExists(graphPaths[i])) continue;
 		graphInv = content::loadManager->LoadFile(graphPaths[i], nil);
 		break;
 	}
 	if(graphInv == nil) {
-		printf("no streamgraph.p3d (extract it with: python3 re/rcf.py <cement.rcf> extract assets streamgraph)\n");
+		printf("no streamgraph.p3d (run with -rcf <cement.rcf>, or extract it with: "
+		       "python3 re/rcf.py <cement.rcf> extract assets streamgraph)\n");
 		return false;
 	}
 	graphInv->Collect(triggers);
 	printf("stream graph: %zu triggers\n", triggers.size());
 
-	// the graph names packages in lower case without the extension
-	DIR *d = opendir(pkgdir);
-	if(d) {
-		struct dirent *e;
-		while((e = readdir(d))) {
-			std::string n = e->d_name;
-			if(n.size() < 5 || strcasecmp(n.c_str()+n.size()-4, ".p3d") != 0) continue;
-			std::string key = n.substr(0, n.size()-4);
-			for(auto &c : key) c = tolower(c);
-			fileIndex[key] = n;
+	// The graph names packages in lower case without the extension, so the real file
+	// names have to come from a directory listing: the archive's name table when one
+	// is mounted, readdir of the extracted tree otherwise.
+	std::vector<std::string> files;
+	if(content::RCFArchive *rcf = content::MountedRCF()) {
+		std::vector<std::string> paths;
+		rcf->List(pkgdir, paths);
+		for(auto &p : paths) {
+			size_t s = p.find_last_of("\\/");
+			files.push_back(s == std::string::npos ? p : p.substr(s+1));
 		}
-		closedir(d);
+	} else {
+		for(auto &root : content::ContentRoots()) {
+			std::string dir = root + "/" + pkgdir;
+			DIR *d = opendir(dir.c_str());
+			if(d == nil) continue;
+			struct dirent *e;
+			while((e = readdir(d)))
+				files.push_back(e->d_name);
+			closedir(d);
+		}
 	}
+	for(auto &n : files) {
+		if(n.size() < 5 || strcasecmp(n.c_str()+n.size()-4, ".p3d") != 0) continue;
+		std::string key = n.substr(0, n.size()-4);
+		for(auto &c : key) c = tolower(c);
+		fileIndex[key] = n;
+	}
+	if(getenv("P3D_VERBOSE"))
+		printf("package index: %zu files in %s\n", fileIndex.size(), pkgdir);
 	return true;
 }
 
