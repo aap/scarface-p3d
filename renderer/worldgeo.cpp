@@ -161,10 +161,13 @@ WorldGeoRenderable::Display(void)
 
 	i32 numVisible = 0;
 	i32 numFading = 0;
+	// P3D_DEBUGWG=<substr>: a few frames of the MATCHING world geo. The budget has to
+	// be spent on matches only --- counted per Display call it was gone on the first
+	// frame, long before streaming had loaded the package one wanted to look at.
 	static const char *dbgWG = getenv("P3D_DEBUGWG");
 	static int dbgFrames = 0;
-	if(dbgWG && dbgFrames > 3) dbgWG = nil;	// a few frames are enough
-	if(dbgWG) dbgFrames++;
+	const char *dbg = dbgWG && dbgFrames < 4 && strstr(GetName(), dbgWG) ? dbgWG : nil;
+	if(dbg) dbgFrames++;
 	for(i32 i = 0; i < numPrimitives; i++) {
 		DrawableHierarchy *d = primitives[i].GetDrawable();
 		const Matrix &poseMat = *pose->GetMatrix(poseIDs[i]);
@@ -212,7 +215,7 @@ WorldGeoRenderable::Display(void)
 		if(visible)
 			numVisible++;
 		// P3D_DEBUGWG=<substr>: every sub-primitive decision of the matching world geos
-		if(dbgWG && strstr(GetName(), dbgWG) && d) {
+		if(dbg && d) {
 			Vector wc = Multiply(Multiply(d->sphere.centre, poseMat), base);
 			printf("  %-24s sub %2d %-40s centre %7.1f %6.1f %7.1f r %6.1f dist %7.1f -> %d\n", GetName(), i, d->GetName(), wc.x, wc.y, wc.z, d->sphere.radius, (Norm(wc - camPos) - d->sphere.radius)*scale, visible);
 		}
