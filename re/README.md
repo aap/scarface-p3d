@@ -133,8 +133,15 @@ Implemented in the repo from these notes (2026-09-15, renderer:: restructured 20
     into out/), Selection tab (per-class details: world geo flags/draw distances,
     zone package members, instance placements with jump, composite primitives, container elements with layer
     and shader, shader state), View tab (camera, instance cull, display-list and shader toggles).
-    ctrl+click in the view picks the nearest object (ray vs bounding spheres), selection is outlined in red,
-    P3D_SELECT=<renderable name> selects at startup. View tab render options (pddiDebug in pddi.h, honoured by
+    ctrl+click in the view picks the nearest object, selection is outlined in red,
+    P3D_SELECT=<renderable name> selects at startup. The pick is TRIANGLE accurate: spheres only pick the
+    candidates (with spheres alone the low-LOD hull and every details_ city block win), then the ray is
+    intersected with the prim groups' triangles through the node's matrix (pose matrix / instance matrix),
+    reading the positions and indices back out of the pddi prim buffer (pddiPrimBuffer::GetPositions/
+    GetIndices, DrawablePrimitive::GetTriangle). P3D_PICK="x y,..." prints every hit along the ray with the
+    mesh, the shader, the owner and whether its node is in the display list (NOT-DRAWN/hidden/fading), plus
+    the meshes the ray crossed without hitting a triangle -- which is how the missing sidewalk at the North
+    Beach bank was found. View tab render options (pddiDebug in pddi.h, honoured by
     the GL shaders): no textures, no lighting, no vertex colours, wireframe; P3D_DEBUGRENDER=notex,nolight,novcol,wire.
   - p3dview: P3D_SKYHIDE=a,b,c hides sky composite elements by name (debugging), P3D_NOSKYFOG=1 keeps the
     below-horizon hemisphere's own colour. 'e' hides/shows the imgui windows (clean screenshots), P3D_GUI=0 starts hidden.
@@ -150,6 +157,12 @@ Implemented in the repo from these notes (2026-09-15, renderer:: restructured 20
     The region/global libraries stay resident. View tab > Streaming shows the current triggers and the
     resident packages, with the delay and loads-per-frame knobs. P3D_STREAM=0 (or no streamgraph.p3d) loads
     the whole static list instead, as before.
+    The 32 packages/azones/*_pocket.p3d are streamed too, and they are NOT in the stream graph: they come
+    from the mission script scriptc/missions/z04/azone_triggers.dso (LoadAzone), whose 25 trigger polygons
+    the viewer reads straight out of the compiled script's global string table (notes/streaming.md §3.1,
+    the .dso layout is in notes/fog.md). They hold 46 world geos and much of that is outdoor ground --
+    details_sbn02p is the whole tiled sidewalk in front of the North Beach bank, and without it there is a
+    hole in the map at native (1197, 8, -171) that looks straight through to the ocean.
   - rcf.h/rcf.cpp: a C++ "ATG CORE CEMENT LIBRARY" reader, so the viewer runs on an unmodified install:
     `p3dview -rcf <cement.rcf>` (or $P3D_RCF, or ./cement.rcf) mounts the 1.5 GB archive and every load
     goes through content::OpenContentFile -- the archive first, by hash (content::CementHash ==

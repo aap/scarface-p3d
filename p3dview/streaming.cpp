@@ -20,10 +20,15 @@
 // cement paths: they resolve inside the mounted cement.rcf, or under a content root
 // (../assets) when there is none --- see content::OpenContentFile (rcf.cpp)
 static const char *pkgdir = "packages/z04";
+static const char *azonedir = "packages/azones";
 static const char *graphPaths[] = {
 	"art/levels/z04/streamgraph.p3d",
 	"packages/z04/streamgraph.p3d",
 };
+// the compiled mission script that owns the azone triggers (see "azone pockets" below)
+static const char *azoneScript = "scriptc/missions/z04/azone_triggers.dso";
+// how a pocket package is named in `packages` (the file lives in another directory)
+static const char *azonePrefix = "azones/";
 
 std::vector<Package*> packages;
 bool streamingEnabled = true;
@@ -31,6 +36,7 @@ bool streamingEnabled = true;
 static content::LoadInventory *graphInv;
 static std::vector<renderer::StreamTrigger*> triggers;
 static std::vector<renderer::StreamTrigger*> current;	// triggers containing the camera
+static std::vector<renderer::StreamTrigger*> currentAzones;
 static std::map<std::string, std::string> fileIndex;	// lower-case name -> real file name
 static content::LoadInventory *resolver;
 static float unloadDelay = 3.0f;	// seconds a package may be unwanted before it goes
@@ -49,16 +55,16 @@ RegisterShapes(content::LoadInventory *inv)
 }
 
 Package*
-LoadPackage(const char *file, content::LoadInventory *resolveInv, bool pinned)
+LoadPackagePath(const char *dir, const char *file, const char *name, content::LoadInventory *resolveInv, bool pinned)
 {
 	char path[512];
-	snprintf(path, sizeof(path), "%s/%s", pkgdir, file);
+	snprintf(path, sizeof(path), "%s/%s", dir, file);
 	u32 t0 = SDL_GetTicks();
 	content::LoadInventory *inv = content::loadManager->LoadFile(path, resolveInv);
 	if(inv == nil)
 		return nil;
 	Package *pkg = new Package;
-	pkg->name = file;
+	pkg->name = name;
 	pkg->inv = inv;
 	pkg->unneeded = 0.0f;
 	pkg->pinned = pinned;
@@ -84,8 +90,14 @@ LoadPackage(const char *file, content::LoadInventory *resolveInv, bool pinned)
 	packages.push_back(pkg);
 	lastLoadMs = SDL_GetTicks() - t0;
 	if(getenv("P3D_VERBOSE"))
-		printf("loaded %s: %zu renderables, %d/%d instance models, %.0f ms\n", file, pkg->rends.size(), resolved, resolved+unresolved, lastLoadMs);
+		printf("loaded %s: %zu renderables, %d/%d instance models, %.0f ms\n", pkg->name.c_str(), pkg->rends.size(), resolved, resolved+unresolved, lastLoadMs);
 	return pkg;
+}
+
+Package*
+LoadPackage(const char *file, content::LoadInventory *resolveInv, bool pinned)
+{
+	return LoadPackagePath(pkgdir, file, file, resolveInv, pinned);
 }
 
 void
@@ -167,6 +179,73 @@ StreamingZonePinned(const char *tag)
 	return true;
 }
 
+// ------------------------------------------------------------- azone "pockets"
+//
+// The shells and details of the map come out of streamgraph.p3d, but the 32
+// `packages/azones/*_pocket.p3d` do not: they are loaded by a mission script. The
+// compiled `scriptc/missions/z04/azone_triggers.dso` declares one trigger volume per
+// pocket and calls `LoadAzone('<pocket>')` / `UnloadAzone('<pocket>')` as the player
+// crosses it (re/notes/streaming.md "azones / pockets"). Those packages are not just
+// shop interiors: 46 world geos live in them, some of which are pieces of the street
+// OUTSIDE --- the tiled sidewalk in front of the North Beach bank is `details_sbn02p`
+// in `sbeachn_02_pocket.p3d`. Without them the map has holes you can see the sky and
+// the ocean through.
+//
+// The viewer runs no scripts, so it reads the polygons and the package names out of the
+// script's GLOBAL STRING TABLE, which holds them in source order: the trigger's name,
+// then one "x y z" string per polygon point, then "LoadAzone('<pocket>');" and
+// "UnloadAzone('<pocket>');". `re/notes/fog.md` ("Reading the compiled script") has the
+// .cso/.dso layout: `u32 version | u32 globalStringTableSize + bytes | ...`, and the
+// hashed `stx########` identifiers that sit between the point strings are simply not
+// float triples, so they are skipped. 25 triggers come out of the z04 script.
+static std::vector<renderer::StreamTrigger*> azones;
+
+static bool
+LoadAzoneTriggers(void)
+{
+	content::LoadStream *s = content::OpenContentFile(azoneScript);
+	if(s == nil) {
+		printf("no %s: the azone pockets stay out (extract it with: "
+		       "python3 re/rcf.py <cement.rcf> extract assets azone_triggers)\n", azoneScript);
+		return false;
+	}
+	u32 version = s->GetU32();
+	u32 size = s->GetU32();
+	if(version != 1 || size == 0 || size > s->GetSize()) {
+		printf("%s: not a compiled script (version %u, string table %u)\n", azoneScript, version, size);
+		s->Release();
+		return false;
+	}
+	char *blob = new char[size+1];
+	s->GetData(blob, size);
+	blob[size] = '\0';
+	s->Release();
+
+	std::vector<math::Vector> points;
+	for(u32 o = 0; o < size; o += strlen(blob+o) + 1) {
+		const char *str = blob + o;
+		char name[128];
+		float x, y, z;
+		int n = 0;
+		if(sscanf(str, "LoadAzone('%127[^']');%n", name, &n) == 1 && str[n] == '\0') {
+			if(points.empty()) continue;
+			renderer::StreamTrigger *t = new renderer::StreamTrigger;
+			t->AddRef();
+			t->name = name;
+			t->tag = name;
+			t->height = 0.0f;
+			t->points = points;
+			t->loads.push_back(renderer::StreamTrigger::Load{name, "Azone"});
+			azones.push_back(t);
+			points.clear();
+		} else if(sscanf(str, "%f %f %f%n", &x, &y, &z, &n) == 3 && str[n] == '\0')
+			points.push_back(math::Vector(x, y, z));
+	}
+	delete[] blob;
+	printf("azone triggers: %zu pockets\n", azones.size());
+	return true;
+}
+
 bool
 StreamingInit(content::LoadInventory *resolveInv)
 {
@@ -214,6 +293,7 @@ StreamingInit(content::LoadInventory *resolveInv)
 	}
 	if(getenv("P3D_VERBOSE"))
 		printf("package index: %zu files in %s\n", fileIndex.size(), pkgdir);
+	LoadAzoneTriggers();
 	return true;
 }
 
@@ -251,6 +331,13 @@ StreamingUpdate(const math::Vector &pos, float dt)
 			if(it != fileIndex.end()) wanted.insert(it->second);
 		}
 	}
+	// ...plus the azone pockets whose script trigger we are inside (LoadAzone)
+	currentAzones.clear();
+	for(u32 i = 0; i < azones.size(); i++)
+		if(azones[i]->Contains(pos.x, pos.z)) {
+			currentAzones.push_back(azones[i]);
+			wanted.insert(azonePrefix + azones[i]->tag + ".p3d");
+		}
 
 	// load the missing ones, a few per frame so the hitch stays small
 	int loads = firstUpdate ? 1000 : loadsPerFrame;
@@ -258,7 +345,10 @@ StreamingUpdate(const math::Vector &pos, float dt)
 		Package *p = FindPackage(file.c_str());
 		if(p) { p->unneeded = 0.0f; continue; }
 		if(loads-- <= 0) break;
-		LoadPackage(file.c_str(), resolver, false);
+		if(file.compare(0, strlen(azonePrefix), azonePrefix) == 0)
+			LoadPackagePath(azonedir, file.c_str()+strlen(azonePrefix), file.c_str(), resolver, false);
+		else
+			LoadPackage(file.c_str(), resolver, false);
 	}
 	firstUpdate = false;
 
@@ -288,6 +378,10 @@ StreamingGUI(void)
 	std::set<std::string> tags;
 	for(u32 i = 0; i < current.size(); i++) tags.insert(current[i]->tag + "  [" + current[i]->Region() + "]");
 	for(auto &t : tags) ImGui::BulletText("%s", t.c_str());
+	if(!currentAzones.empty()) {
+		ImGui::Text("azone pockets here (%zu):", currentAzones.size());
+		for(u32 i = 0; i < currentAzones.size(); i++) ImGui::BulletText("%s", currentAzones[i]->tag.c_str());
+	}
 	ImGui::Separator();
 	ImGui::Text("resident packages (%zu):", packages.size());
 	for(u32 i = 0; i < packages.size(); i++) {

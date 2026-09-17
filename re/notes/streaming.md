@@ -43,7 +43,9 @@ Interiors are separate systems on top of that:
 * **azones / pockets** (`packages/azones/*_pocket.p3d`, 32): small interiors *with* world
   geometry (shops, the pawn shop, the bank...), loaded via `azone_triggers.dso`
   (`LoadAzone('...')`) into the `region_s` slot (`LoadPackage::ApplyChanges`: a pocket may
-  go in the `dzone` or the `region_s` slot).
+  go in the `dzone` or the `region_s` slot). "Interior" undersells them: 46 world geos live
+  in the 32 pockets and a good deal of that is **outdoors** — see §3.1, and mind that
+  nothing in `streamgraph.p3d` mentions them.
 * **conditional subzones**: `tonymansion_01_shell_TS0..TS3` (the mansion as it is rebuilt),
   `cargoShip_01_shell_CS0/CS1`; retail picks one with `ChooseConditionalSubzone`.
 
@@ -103,6 +105,44 @@ The leaked `SubZoneTriggerObject` (`load/subzonetrigger.cpp`, `#if 0`'d out) is 
 record as script attributes (`area`, `height`, `point0..N`, `AddLoadPackage(pkg, slot)`);
 retail moved it into this chunk. The stream trigger polygons in `dzone_triggers.dso` /
 `azone_triggers.dso` are the script-side equivalent for interiors.
+
+## 3.1 The azone triggers, and why a viewer needs them [V]
+
+The 25 azone triggers are **not** in any p3d: they are a compiled Torque script,
+`scriptc/missions/z04/azone_triggers.dso` in `cement.rcf`. One does not have to interpret
+the bytecode to get at them, because everything needed is in the file's **global string
+table** (`u32 version | u32 globalStringTableSize | bytes …`, `re/notes/fog.md` "Reading
+the compiled script"), in source order:
+
+```
+"AzoneTrigger5"                  the TriggerVolume's name  (sometimes a stx######## hash)
+"997.0494204 0 -7.55970948"      point0 …
+…                                (the hashed stx######## attribute names sit in between)
+"LoadAzone('sbeachn_02_pocket');"
+"UnloadAzone('sbeachn_02_pocket');"
+```
+
+So: walk the strings, collect the ones that are exactly three floats as polygon points
+(x, y, z — y is 0 or -1 and unused), and when a `LoadAzone('<pkg>');` turns up, the points
+collected so far are that pocket's polygon. Coordinates are native x/z, the same space the
+`streamgraph.p3d` polygons use. 25 triggers, 4..30 points each; the seven pockets with no
+trigger (`babylonclub_01`, `cargoShip_01`, `cargoShip_01_CS1`, `fidelrecords_01`,
+`havana_02`, `pedropawn_owned`, `pedropawn_toast`) are loaded by mission scripts instead.
+
+**Why it matters for rendering.** A pocket is not only a room. `sbeachn_02_pocket.p3d`
+holds `details_sbn02p` + `skyline_sbn02p` (draw distances 600/500 in its ZonePkg record,
+reference points 1159,-126 and 1130,-136), and that is the tiled **sidewalk, planters,
+stairs, handrails and palms of the plaza in front of the North Beach bank** — outdoor
+ground, right where the player walks. No `streamgraph.p3d` trigger asks for any of it, and
+the surrounding `shells_sbn02s` / `details_sbn02s` meshes stop at its edge, so a renderer
+that only follows the stream graph has a hole there: at native ≈(1197, 8, -171) you look
+straight through the ground at the ocean plane and the low-LOD hull.
+
+`AzoneTrigger5` (the `sbeachn_02_pocket` one) is a 19-point polygon spanning x 832..1384,
+z -272..102, which contains the whole bank block. The pocket's world geo is `details_`
+prefixed, so `WorldGeoRenderable::Display` culls it at the 120 m details band as usual —
+i.e. from further away (or from outside the trigger) retail shows the same gap, filled by
+the fogged low-LOD city.
 
 ## 4. What is inside a subzone package
 

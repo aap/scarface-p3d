@@ -14,6 +14,10 @@ struct Package {
 // load/unload one package into the gameplay scene (shared by streaming and the
 // static "load everything" path)
 Package *LoadPackage(const char *file, content::LoadInventory *resolveInv, bool pinned);
+// the same out of another content directory (the azone pockets live in
+// packages/azones); `name` is what the package is called in `packages`
+Package *LoadPackagePath(const char *dir, const char *file, const char *name,
+                         content::LoadInventory *resolveInv, bool pinned);
 void UnloadPackage(Package *pkg);
 extern std::vector<Package*> packages;
 
