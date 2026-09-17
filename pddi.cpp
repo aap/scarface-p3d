@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "pddi.h"
 #include "texture.h"
 

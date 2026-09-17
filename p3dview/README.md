@@ -17,6 +17,13 @@ make -C p3dview -j8             # the viewer (needs SDL2 and imgui; IMGUI_DIR in
 (`P3D_CAMPOS="…" P3D_CAMTARGET="…"   # native x y z  zones …`) and puts it on the clipboard.
 ctrl+click picks an object. WASD moves, the mouse looks.
 
+## Debugging aids
+
+`P3D_PICK="x y[,x y…]"` picks at those pixels on the screenshot frame and prints the hit (bounding
+spheres, so big meshes win). `P3D_DEBUGWG=<substr>` prints every sub-primitive decision of the
+matching world geos for a few frames. `P3D_TEXDUMP=<dir>` writes every uploaded texture as PNG.
+`P3D_SKYHIDE=a,b` hides sky elements, `P3D_HIDELIST=n,m` display lists.
+
 ## Run
 
 ```sh

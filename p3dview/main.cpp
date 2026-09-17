@@ -207,6 +207,11 @@ if(0)
 		int shotframe = getenv("P3D_SHOTFRAME") ? atoi(getenv("P3D_SHOTFRAME")) : 5;
 		if(shot && ++frame == shotframe) {
 			done = true;
+			// P3D_PICK="x y[,x y...]": pick at these pixels on the last frame and print the hit
+			if(const char *pk = getenv("P3D_PICK")) {
+				int px, py, n;
+				while(sscanf(pk, "%d %d%n", &px, &py, &n) == 2) { ExplorerPick(px, py); pk += n; if(*pk == ',') pk++; }
+			}
 		}
 		// P3D_CAMPOS2="x y z": jump there half way, to exercise streaming
 		if(shot && getenv("P3D_CAMPOS2") && frame == shotframe/2)

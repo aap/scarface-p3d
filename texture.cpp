@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "core.h"
 #include "imagefactory.h"
 #include "texture.h"
@@ -109,7 +110,8 @@ TextureLoader::LoadImage(content::ChunkFile *f, Texture *buildTexture, int mipma
 	i32 alpha = f->GetI32();
 	u32 format = f->GetU32();
 
-//	printf("reading image %s %d %d %d %X\n", name, width, height, bpp, format);
+	extern const char *g_texDumpName;
+	g_texDumpName = name;
 
 	Texture *texture = buildTexture;
 	while(f->ChunksRemaining()) {

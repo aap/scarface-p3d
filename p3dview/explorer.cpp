@@ -686,6 +686,13 @@ ViewTab(void)
 			ImGui::Checkbox(shaderRenderable[i].shader, &shaderRenderable[i].visible);
 		ImGui::TreePop();
 	}
+	if(ImGui::CollapsingHeader("Time of day", ImGuiTreeNodeFlags_DefaultOpen) && renderer::gLightManager) {
+		renderer::LightManager *lm = renderer::gLightManager;
+		ImGui::SliderFloat("hour", &lm->timeOfDay, 0.0f, 24.0f, "%.2f");
+		ImGui::SameLine();
+		ImGui::TextDisabled("lights, fog, sky, night lights");
+		ImGui::Checkbox("raining", &lm->raining);
+	}
 	if(ImGui::CollapsingHeader("Shadows")) {
 		ImGui::Checkbox("decals darken by coverage squared (retail's mask arithmetic)", &pddiShadowDecal.squareCoverage);
 		ImGui::SliderFloat("decal strength", &pddiShadowDecal.strength, 0.0f, 2.0f, "%.2f");
@@ -760,7 +767,7 @@ RaySphere(const Vector &o, const Vector &d, const Sphere &s, float &t)
 	float disc = b*b - c;
 	if(disc < 0.0f) return false;
 	t = -b - sqrtf(disc);
-	if(t < 0.0f) t = 0.0f;
+	if(t < 0.0f) return false;	// the ray starts inside: the city LOD, the sky --- not what a click means
 	return true;
 }
 
@@ -781,6 +788,7 @@ ExplorerPick(int mx, int my)
 	for(u32 i = 0; i < renderables.size(); i++) {
 		renderer::Renderable *r = renderables[i];
 		if(!r->isVisible) continue;
+		if(r->typeMask == renderer::Renderable::TYPE_SKY || r->typeMask == renderer::Renderable::TYPE_OCEAN) continue;	// their spheres hold the camera
 		if(auto *ir = dynamic_cast<renderer::InstanceRenderable*>(r)) {
 			if(ir->shape == nil) continue;
 			for(u32 j = 0; j < ir->locations.size(); j++) {
@@ -815,6 +823,12 @@ ExplorerPick(int mx, int my)
 		}
 	}
 	if(found) Select(obj, &bsph, bbox, bm, bloc);
+	// P3D_PICK / debugging: say what was hit
+	if(getenv("P3D_PICK")) {
+		if(!found) { printf("pick (%d,%d): nothing\n", mx, my); return; }
+		Entity *e = dynamic_cast<Entity*>(obj);
+		printf("pick (%d,%d): %s [%s] sphere %.1f %.1f %.1f r %.1f loc %d\n", mx, my, e ? e->GetName() : "?", obj->GetClassName(), bsph.centre.x, bsph.centre.y, bsph.centre.z, bsph.radius, bloc);
+	}
 	else Select(nil);
 }
 

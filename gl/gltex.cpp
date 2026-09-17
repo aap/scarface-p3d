@@ -11,6 +11,8 @@
 namespace pure3d
 {
 
+const char *g_texDumpName;
+
 glTexture::glTexture(void)
 {
 	gltex = 0;
@@ -45,6 +47,12 @@ glTexture::AddMipmap(u32 format, u32 sz, u8 *data)
 		return;
 	}
 
+	// P3D_TEXDUMP=<dir>: write every decoded texture as <dir>/<n>_<name>.png (debugging)
+	if(const char *dd = getenv("P3D_TEXDUMP")) {
+		static int n = 0;
+		char path[512]; snprintf(path, sizeof(path), "%s/%04d_%s.png", dd, n++, g_texDumpName ? g_texDumpName : "x");
+		lodepng_encode32_file(path, image, width, height);
+	}
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, gltex);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
