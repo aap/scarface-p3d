@@ -694,8 +694,14 @@ ViewTab(void)
 		ImGui::Checkbox("raining", &lm->raining);
 	}
 	if(ImGui::CollapsingHeader("Shadows")) {
-		ImGui::Checkbox("decals darken by coverage squared (retail's mask arithmetic)", &pddiShadowDecal.squareCoverage);
-		ImGui::SliderFloat("decal strength", &pddiShadowDecal.strength, 0.0f, 2.0f, "%.2f");
+		ImGui::Checkbox("decals through the alpha mask (retail's ext 0x108)", &pddiShadowDecal.mask);
+		ImGui::SameLine();
+		ImGui::TextDisabled(pure3d::context->HasStaticShadowMask() ? "" : "(no destination alpha)");
+		ImGui::SliderFloat("decal strength", &pddiShadowDecal.strength, 0.0f, 1.0f, "%.2f");
+		ImGui::SameLine();
+		ImGui::TextDisabled("0.5 = the extension's 0xff808080 wash");
+		if(!pddiShadowDecal.mask)
+			ImGui::Checkbox("without the mask: darken by coverage squared", &pddiShadowDecal.squareCoverage);
 		ImGui::TextDisabled("lists 7/8 (decals) can be hidden under display lists below");
 	}
 	if(ImGui::CollapsingHeader("Sky")) {

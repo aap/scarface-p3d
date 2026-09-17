@@ -79,6 +79,11 @@ int main(int argc, char **argv)
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+    // the frame buffer's alpha channel is a mask, exactly as it is in retail
+    // (re/notes/displaylist.md §1 step 3): the static shadow decals accumulate their
+    // coverage in it and the frame is multiplied by it once (gl/gl.cpp
+    // glContext::Begin/EndStaticShadows). Without it they are painted on the ground.
+    SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     SDL_Window* window = SDL_CreateWindow("Dear ImGui SDL2+OpenGL3 example", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);

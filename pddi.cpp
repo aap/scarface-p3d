@@ -9,7 +9,8 @@ namespace pure3d
 {
 
 pddiDebugOptions pddiDebug = { false, false, false, false };
-pddiShadowDecalOptions pddiShadowDecal = { true, 0.75f };	// strength: a guess between the full mask and the 0xff808080 wash of the End pass [?]
+// strength 0.5 = the 0xff808080 wash colour the extension's ctor installs (notes/shadows.md §2.1)
+pddiShadowDecalOptions pddiShadowDecal = { true, true, 0.5f };
 
 bool pddiInstancedDepthPass;
 

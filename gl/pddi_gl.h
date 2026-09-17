@@ -285,7 +285,10 @@ class glState
 	i32 u_debug;
 	i32 u_vertexFade;
 	i32 u_shadowDecal;
-	Vector4 shadowDecal;		// x: enable (alpha = coverage^2 * strength), y: strength
+	Vector4 shadowDecal;		// x: enable, y: strength, z: square the coverage, w: mask pass
+	bool shadowDecalMask;		// the decals go into the frame's alpha mask, so they
+					// write plain coverage and nothing else
+	i32 u_quadColour;		// the full-screen quads of EndStaticShadows
 	i32 u_fade;
 	i32 u_lit;
 	i32 u_fogColour;
@@ -312,7 +315,16 @@ public:
 	void SetMaterial(bool isLit, bool twoSided, const MaterialColours &colors);
 	// TODO: more
 	void SetTexture(pddiTexture *tex);
-	void SetShadowDecal(bool enable) { shadowDecal = Vector4(enable ? 1.0f : 0.0f, pddiShadowDecal.strength, pddiShadowDecal.squareCoverage ? 1.0f : 0.0f, 0.0f); }
+	// retail: d3dState::SetUVMode (0x65afb0) writes D3DSAMP_ADDRESSU/V/W from the
+	// shader's UVMD --- table_7ec8fc = { D3DTADDRESS_WRAP, D3DTADDRESS_CLAMP }
+	void SetUVMode(pddiUVMode mode);
+	void SetShadowDecalMask(bool on) { shadowDecalMask = on; }
+	void SetShadowDecal(bool enable) {
+		shadowDecal = Vector4(enable ? 1.0f : 0.0f, pddiShadowDecal.strength,
+			pddiShadowDecal.squareCoverage ? 1.0f : 0.0f,
+			shadowDecalMask ? 1.0f : 0.0f);
+	}
+	void SetQuadColour(const Vector4 &col);
 	void SetVertexFade(float start, float end, bool enable) { vertexFade = Vector4(start, end, enable ? 1.0f : 0.0f, 0.0f); }
 	// the per-primitive cross-fade of PDDI_SP_FADE, 0 = opaque, 1 = gone
 	void SetFade(float f) { fade = f < 0.0f ? 0.0f : f > 1.0f ? 1.0f : f; }
@@ -350,6 +362,12 @@ class glContext : public pddiContext
 	Matrix projMatrix;
 	bool zWrite;
 	bool zTest;
+	// the static shadow mask (retail's pddi extension 0x108, see pddi.h)
+	int alphaBits;			// -1 = not asked yet
+	bool inStaticShadows;
+	glProgram *quadProgram;		// a flat-colour full-screen quad
+	GLuint quadVBO;
+	void DrawFullscreenQuad(const Vector4 &col);
 public:
 	glContext(void);
 
@@ -393,6 +411,10 @@ public:
 		glColorMask(r ? GL_TRUE : GL_FALSE, g ? GL_TRUE : GL_FALSE,
 		            b ? GL_TRUE : GL_FALSE, a ? GL_TRUE : GL_FALSE);
 	}
+
+	virtual bool HasStaticShadowMask(void);
+	virtual void BeginStaticShadows(void);
+	virtual void EndStaticShadows(float strength);
 };
 
 

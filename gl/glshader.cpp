@@ -118,6 +118,7 @@ glShader::SetPass(i32 pass)
 	// a frame out of the game's own pure3d::LightGroups (renderer/lighting.cpp)
 	simpleProgram->Bind();
 	state->SetTexture(baseTex);
+	state->SetUVMode(uvMode);
 	state->SetMaterial(isLit, twoSided, colours);
 	state->SetAlphaBlend(blendMode);
 	// retail d3dSimpleShader::SetPass 0x65c043: while the instancing extension's
@@ -130,6 +131,10 @@ glShader::SetPass(i32 pass)
 	else
 		state->SetAlphaTest(alphaTest, alphaCompare, alphaRef);
 	state->SetVertexFade(0.0f, 0.0f, false);
+	// ... and off again for everything that is not glShadowDecalShader: the decals are
+	// drawn in the middle of the frame (group 10), so leaving it set gave every blended
+	// surface after them a squared alpha
+	state->SetShadowDecal(false);
 	// the cross-fade of PDDI_SP_FADE. The shaders apply it to alpha AFTER the alpha
 	// test, so it only bites where something is actually blended --- which is all the
 	// viewer needs for the shadow decals and the other blended fading lists. Retail
