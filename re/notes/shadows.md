@@ -145,8 +145,11 @@ i.e. **7** = shadow decals, **8** = the same while their world geo is cross-fadi
   * it ends by tail-calling `renderContext->SetZWrite(false)` (`[shader+0x10]->[+0x118](0)`) — the
     shader turns z-write off by itself as well as the list walk doing it. **[V]**
 * The textures are 128×128 A8R8G8B8 with `alphaDepth = 8`: **black shapes, alpha = coverage**
-  (verified by extracting `r_tree_shadow.tga` out of `downtown_region.p3d` — it is a PNG of black
-  tree silhouettes on alpha 0). **[V]**
+  (verified by extracting `r_tree_shadow.tga` out of `downtown_region.p3d` — it is a PNG whose
+  RGB is 0 in all 16384 pixels and whose alpha runs 0 (46 % of the texture) to 255 (26 %)).
+  So at full coverage a shadow decal is **pure black**, however it is composited; only the
+  penumbra depends on the mask arithmetic of §2 (a plain decal darkens it by `a`, the mask
+  by something closer to `a²`). **[V]**
 
 ---
 
