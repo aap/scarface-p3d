@@ -313,6 +313,18 @@ public:
 	// not original
 	virtual void SetVertices(void *vertices) = 0;
 	virtual void SetIndices(void *indices) = 0;
+
+	// not original: a CPU read-back of the geometry, so that the viewer can pick a
+	// TRIANGLE instead of a bounding sphere (p3dview/explorer.cpp, through
+	// DrawablePrimitive::GetTriangle). The backend keeps the vertex buffer it uploads
+	// anyway; the index list is kept for this. Positions sit at offset 0 of the
+	// vertex, which is where every pddi vertex layout puts them.
+	virtual u32 GetVertexCount(void) { return 0; }
+	virtual u32 GetIndexCount(void) { return 0; }
+	virtual pddiPrimType GetPrimType(void) { return PDDI_PRIM_TRIANGLES; }
+	// nil when the buffer carries no positions; *strideBytes is the vertex stride
+	virtual const float *GetPositions(u32 *strideBytes) { return nil; }
+	virtual const u16 *GetIndices(void) { return nil; }
 };
 
 class pddiDevice : public pddiObject

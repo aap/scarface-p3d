@@ -137,6 +137,55 @@ PrimGroup::IsALUM(void)
 	return mShader && mShader->GetALUM();
 }
 
+// --- the geometry read-back: the triangles as the backend would draw them, for
+// p3dview's triangle-accurate picker. A group with no index list is a bare vertex
+// array (the sky boxes), exactly as glPrimBuffer::Display draws it.
+
+u32
+PrimGroup::GetNumTriangles(void)
+{
+	if(mPrimBuffer == nil)
+		return 0;
+	u32 n = mPrimBuffer->GetIndexCount();
+	if(n == 0)
+		n = mPrimBuffer->GetVertexCount();
+	if(n < 3)
+		return 0;
+	switch(mPrimBuffer->GetPrimType()) {
+	case PDDI_PRIM_TRIANGLES: return n/3;
+	case PDDI_PRIM_TRISTRIP: return n-2;
+	default: return 0;
+	}
+}
+
+bool
+PrimGroup::GetTriangle(u32 i, Vector v[3])
+{
+	if(mPrimBuffer == nil)
+		return false;
+	u32 stride = 0;
+	const float *pos = mPrimBuffer->GetPositions(&stride);
+	if(pos == nil || stride < 3*sizeof(float))
+		return false;
+	const u16 *indices = mPrimBuffer->GetIndices();
+	u32 nIndices = mPrimBuffer->GetIndexCount();
+	u32 nVertices = mPrimBuffer->GetVertexCount();
+	// TRISTRIP walks by one, TRIANGLES by three; the winding does not matter here
+	u32 base = mPrimBuffer->GetPrimType() == PDDI_PRIM_TRISTRIP ? i : i*3;
+	for(int k = 0; k < 3; k++) {
+		u32 j = base + k;
+		if(indices && nIndices) {
+			if(j >= nIndices) return false;
+			j = indices[j];
+		}
+		if(j >= nVertices)
+			return false;
+		const float *p = (const float*)((const u8*)pos + j*stride);
+		v[k] = Vector(p[0], p[1], p[2]);
+	}
+	return true;
+}
+
 
 
 PrimGroupLoader::PrimGroupLoader(void)

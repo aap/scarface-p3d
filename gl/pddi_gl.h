@@ -426,6 +426,9 @@ class glPrimBuffer : public pddiPrimBuffer
 	GLuint ibo;
 	GLuint vbo;
 	u8 *vertexBuffer;
+	// the CPU copy of the index list, kept only so that the geometry can be read back
+	// (pddiPrimBuffer::GetIndices); the GL draw uses the ibo
+	u16 *indexBuffer;
 	bool lockedVertex;
 	bool lockedIndex;
 	int stride;
@@ -440,6 +443,12 @@ public:
 
 	virtual void SetVertices(void *vertices);
 	virtual void SetIndices(void *indices);
+
+	virtual u32 GetVertexCount(void) { return nVertices; }
+	virtual u32 GetIndexCount(void) { return nIndices; }
+	virtual pddiPrimType GetPrimType(void) { return primTypePDDI; }
+	virtual const float *GetPositions(u32 *strideBytes);
+	virtual const u16 *GetIndices(void) { return indexBuffer; }
 
 	void Display(void);
 };

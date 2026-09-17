@@ -757,18 +757,183 @@ ExplorerGUI(void)
 }
 
 // ---------------------------------------------------------------- picking
+//
+// The pick is triangle accurate. Bounding spheres only choose the candidates --- with
+// spheres alone the low-LOD city hull (one sphere over the whole island) and every
+// details_ composite (a whole city block) win every pick, which makes the picker
+// useless for the question it exists to answer: "what geometry is at this pixel, and is
+// it being drawn?". So every candidate whose sphere the ray crosses has its prim groups'
+// triangles intersected, through the same matrix its display list node carries (the
+// composite's pose matrices, or the eco prop's placement matrix), and the hits are
+// reported nearest first with the mesh, the shader, the owning renderable and whether
+// its node is in the display list.
 
 static bool
 RaySphere(const Vector &o, const Vector &d, const Sphere &s, float &t)
 {
 	Vector m = o - s.centre;
 	float b = Dot(m, d), c = Dot(m, m) - s.radius*s.radius;
-	if(c > 0.0f && b > 0.0f) return false;
 	float disc = b*b - c;
 	if(disc < 0.0f) return false;
-	t = -b - sqrtf(disc);
-	if(t < 0.0f) return false;	// the ray starts inside: the city LOD, the sky --- not what a click means
+	disc = sqrtf(disc);
+	if(-b + disc < 0.0f) return false;	// entirely behind us
+	t = -b - disc;
+	if(t < 0.0f) t = 0.0f;			// the ray starts inside it
 	return true;
+}
+
+// Moeller-Trumbore, two sided: a lot of the map's ground is one-sided and the hit is
+// wanted whichever way the triangle faces
+static bool
+RayTriangle(const Vector &o, const Vector &d, const Vector &a, const Vector &b, const Vector &c, float &t)
+{
+	Vector ab = b - a, ac = c - a;
+	Vector p = Cross(d, ac);
+	float det = Dot(ab, p);
+	if(fabsf(det) < 1.0e-12f) return false;
+	float inv = 1.0f/det;
+	Vector tv = o - a;
+	float u = Dot(tv, p)*inv;
+	if(u < -1.0e-5f || u > 1.0f + 1.0e-5f) return false;
+	Vector q = Cross(tv, ab);
+	float v = Dot(d, q)*inv;
+	if(v < -1.0e-5f || u + v > 1.0f + 1.0e-5f) return false;
+	t = Dot(ac, q)*inv;
+	return t >= 0.0f;
+}
+
+struct PickHit {
+	float t;
+	Vector point;			// native coords
+	DrawableHierarchy *draw;	// the mesh (a DrawableContainer / Geometry)
+	DrawablePrimitive *prim;	// the prim group the triangle belongs to
+	renderer::Renderable *owner;
+	int element;			// prim group index inside the mesh
+	int sub;			// sub-primitive index in the composite, else -1
+	int loc;			// eco prop placement index, else -1
+	int tri;
+	bool inList;			// this drawable's node is in the display list
+	bool ownerVisible;
+	float fade;
+	Sphere sphere;			// the mesh's sphere in world space
+	Box3D box;
+	Matrix matrix;
+};
+
+static const char*
+HitShaderName(const PickHit &h)
+{
+	if(h.prim == nil) return "-";
+	Shader *sh = h.prim->GetShader();
+	return sh ? sh->GetName() : "-";
+}
+
+// A mesh whose bounding sphere the ray crosses but none of whose triangles it hits.
+// When a pick comes up empty that is the interesting list: it names the meshes that
+// surround the gap, i.e. the ones that should have covered it.
+struct PickMiss {
+	float t;
+	DrawableHierarchy *draw;
+	renderer::Renderable *owner;
+	int sub, loc;
+	float distance;		// from the ray to the sphere centre
+};
+static std::vector<PickMiss> pickMisses;
+
+// intersect the ray with one drawable's triangles, through the matrix its display list
+// node carries
+static void
+PickDrawable(std::vector<PickHit> &hits, const Vector &o, const Vector &d,
+             DrawableHierarchy *dh, const Matrix &m, renderer::Renderable *owner,
+             renderer::DisplayListPrimitive *dlp, int sub, int loc)
+{
+	DrawableContainer *dc = dynamic_cast<DrawableContainer*>(dh);
+	if(dc == nil) return;
+	// the sphere only decides whether the triangles are worth looking at
+	float scale = 0.0f;
+	for(int i = 0; i < 3; i++) {
+		float l = Norm(Vector(m.e[i*4+0], m.e[i*4+1], m.e[i*4+2]));
+		if(l > scale) scale = l;
+	}
+	if(scale <= 0.0f) scale = 1.0f;
+	Sphere ws(Multiply(dh->sphere.centre, m), dh->sphere.radius*scale);
+	float ts = 0.0f;
+	if(ws.radius > 0.0f && !RaySphere(o, d, ws, ts)) return;
+
+	u32 before = hits.size();
+	for(i32 e = 0; e < dc->GetNumElements(); e++) {
+		DrawablePrimitive *dp = dc->GetElement(e)->prim;
+		if(dp == nil) continue;
+		u32 n = dp->GetNumTriangles();
+		float bestT = 1.0e30f;
+		int bestTri = -1;
+		for(u32 i = 0; i < n; i++) {
+			Vector v[3];
+			if(!dp->GetTriangle(i, v)) continue;
+			for(int k = 0; k < 3; k++) v[k] = Multiply(v[k], m);
+			float t;
+			if(RayTriangle(o, d, v[0], v[1], v[2], t) && t < bestT) { bestT = t; bestTri = (int)i; }
+		}
+		if(bestTri < 0) continue;
+		PickHit h;
+		h.t = bestT;
+		h.point = o + d*bestT;
+		h.draw = dh;
+		h.prim = dp;
+		h.owner = owner;
+		h.element = e;
+		h.sub = sub;
+		h.loc = loc;
+		h.tri = bestTri;
+		h.inList = dlp && dlp->IsInList();
+		h.ownerVisible = owner == nil || owner->isVisible;
+		h.fade = dh->GetFadeAmount();
+		h.sphere = ws;
+		h.box = dh->box;
+		h.matrix = m;
+		hits.push_back(h);
+	}
+	if(hits.size() == before) {
+		// the sphere was crossed and no triangle was: remember it for the report
+		PickMiss mi;
+		mi.t = ts;
+		mi.draw = dh;
+		mi.owner = owner;
+		mi.sub = sub;
+		mi.loc = loc;
+		Vector v = ws.centre - o;
+		mi.distance = Norm(v - d*Dot(v, d));
+		pickMisses.push_back(mi);
+	}
+}
+
+// the ocean has no readable triangle list (its projected grid is rebuilt on the CPU
+// every frame) and the tallest wave in the game is 16 cm --- the plane is the honest
+// answer, and "is the ocean in front of the ground here" is exactly what it is asked
+static void
+PickOcean(std::vector<PickHit> &hits, const Vector &o, const Vector &d, renderer::OceanRenderable *oc)
+{
+	Ocean *ocean = oc->GetOcean();
+	if(ocean == nil || fabsf(d.y) < 1.0e-6f) return;
+	float t = (ocean->GetSeaLevel() - o.y)/d.y;
+	if(t < 0.0f) return;
+	PickHit h;
+	h.t = t;
+	h.point = o + d*t;
+	h.draw = oc->container;
+	h.prim = oc->container->GetPrimitive();
+	h.owner = oc;
+	h.element = 0;
+	h.sub = -1;
+	h.loc = -1;
+	h.tri = -1;
+	h.inList = oc->elements.Size() > 0 && oc->elements[0].prim.IsInList();
+	h.ownerVisible = oc->isVisible;
+	h.fade = 0.0f;
+	h.sphere = Sphere(h.point, 0.0f);
+	h.box = Box3D();
+	h.matrix.Identity();
+	hits.push_back(h);
 }
 
 void
@@ -783,53 +948,104 @@ ExplorerPick(int mx, int my)
 	Vector dir = Normalized(fwd + right*(ndcx*tanY*camera.m_aspectRatio) + up*(ndcy*tanY));
 	Vector o = ToNative(camera.m_position), d = ToNative(dir);
 
-	float best = 1e30f; bool found = false;
-	IRefCount *obj = nil; Sphere bsph; const Box3D *bbox = nil; const Matrix *bm = nil; int bloc = -1;
+	std::vector<PickHit> hits;
+	pickMisses.clear();
 	for(u32 i = 0; i < renderables.size(); i++) {
 		renderer::Renderable *r = renderables[i];
-		if(!r->isVisible) continue;
-		if(r->typeMask == renderer::Renderable::TYPE_SKY || r->typeMask == renderer::Renderable::TYPE_OCEAN) continue;	// their spheres hold the camera
+		// the sky is camera locked; picking it says nothing about the world. Everything
+		// else is tested even when it is hidden or culled --- "there IS geometry here,
+		// it is just not drawn" is the answer we are usually after.
+		if(r->typeMask == renderer::Renderable::TYPE_SKY) continue;
+		if(auto *oc = dynamic_cast<renderer::OceanRenderable*>(r)) {
+			PickOcean(hits, o, d, oc);
+			continue;
+		}
 		if(auto *ir = dynamic_cast<renderer::InstanceRenderable*>(r)) {
 			if(ir->shape == nil) continue;
 			for(u32 j = 0; j < ir->locations.size(); j++) {
 				renderer::InstanceLocation &loc = ir->locations[j];
-				float t;
-				if(loc.sphere.radius > 0.0f && RaySphere(o, d, loc.sphere, t) && t < best) {
-					best = t; found = true; obj = ir; bsph = loc.sphere; bbox = &ir->shape->box; bm = &loc.matrix; bloc = j;
-				}
+				// the node's matrix IS the placement matrix (display_list.cpp §Add)
+				PickDrawable(hits, o, d, ir->shape, loc.matrix, ir, &loc.prim, -1, j);
+				if(ir->lodShape)
+					PickDrawable(hits, o, d, ir->lodShape, loc.matrix, ir, &loc.lodPrim, -1, j);
 			}
 			continue;
 		}
-		// world geometry: prefer the sub-drawables of the composite so picks are precise
+		auto *wg = dynamic_cast<renderer::WorldGeoRenderable*>(r);
+		bool customPath = wg && wg->numPrimitives > 0 && (wg->isDetails || wg->isSkyline || wg->drawFirst);
 		for(u32 e = 0; e < r->elements.Size(); e++) {
 			DrawableHierarchy *dh = r->elements[e].prim.GetDrawable();
 			if(dh == nil) continue;
 			CompositeDrawable *comp = dynamic_cast<CompositeDrawable*>(dh);
-			if(comp) {
-				CompositeDrawable::ActivePrimitiveList *pl = comp->GetPrimitiveList();
-				for(u32 p = 0; p < pl->GetNumPrimitives(); p++) {
-					DrawableContainer *dc = pl->GetPrimitive(p)->GetDrawable();
-					float t;
-					if(dc && RaySphere(o, d, dc->sphere, t) && t < best) {
-						best = t; found = true; obj = dc; bsph = dc->sphere; bbox = &dc->box; bm = nil; bloc = -1;
-					}
-				}
-			} else {
-				float t;
-				if(RaySphere(o, d, dh->sphere, t) && t < best) {
-					best = t; found = true; obj = r; bsph = dh->sphere; bbox = &dh->box; bm = nil; bloc = -1;
-				}
+			if(comp == nil) {
+				PickDrawable(hits, o, d, dh, r->matrix, r, &r->elements[e].prim, -1, -1);
+				continue;
+			}
+			Pose *pose = comp->GetPose();
+			CompositeDrawable::ActivePrimitiveList *pl = comp->GetPrimitiveList();
+			if(pose == nil || pl == nil) continue;
+			// WorldGeoRenderable::Display puts the composite's pose root under the
+			// sub-primitives, the base Renderable::Display the renderable's matrix
+			const Matrix &base = customPath && e == 0 ? *pose->GetMatrix(0) : r->matrix;
+			for(u32 p = 0; p < pl->GetNumPrimitives(); p++) {
+				DrawableContainer *dc = pl->GetPrimitive(p)->GetDrawable();
+				if(dc == nil) continue;
+				Matrix m = Multiply(*pose->GetMatrix(pl->GetPrimitive(p)->id), base);
+				// on the custom path every sub-primitive has its own node
+				renderer::DisplayListPrimitive *dlp = customPath && e == 0 && (i32)p < wg->numPrimitives ?
+					&wg->primitives[p] : &r->elements[e].prim;
+				PickDrawable(hits, o, d, dc, m, r, dlp, (int)p, -1);
 			}
 		}
 	}
-	if(found) Select(obj, &bsph, bbox, bm, bloc);
-	// P3D_PICK / debugging: say what was hit
+	std::sort(hits.begin(), hits.end(), [](const PickHit &a, const PickHit &b) { return a.t < b.t; });
+
+	// select the nearest hit that is actually being drawn; failing that, the nearest
+	int pick = -1;
+	for(u32 i = 0; i < hits.size(); i++)
+		if(hits[i].inList && hits[i].ownerVisible) { pick = (int)i; break; }
+	if(pick < 0 && !hits.empty()) pick = 0;
+
+	// P3D_PICK / debugging: the whole sorted list, which is the point of the tool
 	if(getenv("P3D_PICK")) {
-		if(!found) { printf("pick (%d,%d): nothing\n", mx, my); return; }
-		Entity *e = dynamic_cast<Entity*>(obj);
-		printf("pick (%d,%d): %s [%s] sphere %.1f %.1f %.1f r %.1f loc %d\n", mx, my, e ? e->GetName() : "?", obj->GetClassName(), bsph.centre.x, bsph.centre.y, bsph.centre.z, bsph.radius, bloc);
+		printf("pick (%d,%d) native ray %.1f %.1f %.1f -> %.3f %.3f %.3f: %zu hit%s\n",
+			mx, my, o.x, o.y, o.z, d.x, d.y, d.z, hits.size(), hits.size() == 1 ? "" : "s");
+		for(u32 i = 0; i < hits.size() && i < 20; i++) {
+			const PickHit &h = hits[i];
+			Entity *me = dynamic_cast<Entity*>(h.draw);
+			char where[32] = "";
+			if(h.loc >= 0) snprintf(where, sizeof(where), " loc %d", h.loc);
+			else if(h.sub >= 0) snprintf(where, sizeof(where), " sub %d", h.sub);
+			printf("  %s t %8.2f  at %8.1f %7.1f %8.1f  %-30s p%d %-38s %s%s%s%s%s\n",
+				(int)i == pick ? "*" : " ", h.t, h.point.x, h.point.y, h.point.z,
+				me ? me->GetName() : "?", h.element, HitShaderName(h),
+				h.owner ? h.owner->GetName() : "?", where,
+				h.inList ? "" : "  NOT-DRAWN", h.ownerVisible ? "" : " hidden",
+				h.fade > 0.0f ? "  fading" : "");
+		}
+		// the meshes the ray passed through without hitting a triangle: when the pick
+		// finds nothing (or nothing sensible) these are the ones with the gap
+		std::sort(pickMisses.begin(), pickMisses.end(),
+			[](const PickMiss &a, const PickMiss &b) { return a.distance < b.distance; });
+		for(u32 i = 0; i < pickMisses.size() && i < 8; i++) {
+			const PickMiss &m = pickMisses[i];
+			Entity *me = dynamic_cast<Entity*>(m.draw);
+			printf("    miss sphere t %8.2f  %.1f m off axis  %-30s %s sub %d loc %d\n",
+				m.t, m.distance, me ? me->GetName() : "?",
+				m.owner ? m.owner->GetName() : "?", m.sub, m.loc);
+		}
 	}
-	else Select(nil);
+	if(pick >= 0) {
+		const PickHit &h = hits[pick];
+		// what the Selection tab wants to see: the sub-drawable of a composite, but
+		// the renderable itself for an eco prop placement (its panel lists the
+		// placements) and for anything that is one drawable
+		IRefCount *obj = h.sub >= 0 ? (IRefCount*)h.draw : (IRefCount*)h.owner;
+		Select(obj, &h.sphere, &h.box, h.loc >= 0 ? &h.matrix : nil, h.loc);
+	} else {
+		if(getenv("P3D_PICK")) printf("pick (%d,%d): nothing\n", mx, my);
+		Select(nil);
+	}
 }
 
 // ---------------------------------------------------------------- highlight overlay

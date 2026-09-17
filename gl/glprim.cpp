@@ -417,6 +417,7 @@ glPrimBuffer::glPrimBuffer(pddiPrimType primType, u32 vertexFormat, u32 nVertice
    vertexFormat(vertexFormat),
    nVertices(nVertices),
    nIndices(nIndices),
+   indexBuffer(nil),
    lockedVertex(false),
    lockedIndex(false)
 {
@@ -434,6 +435,7 @@ glPrimBuffer::glPrimBuffer(pddiPrimType primType, u32 vertexFormat, u32 nVertice
 glPrimBuffer::~glPrimBuffer(void)
 {
 	delete[] vertexBuffer;
+	delete[] indexBuffer;
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 	glDeleteBuffers(1, &vbo);
@@ -473,6 +475,19 @@ glPrimBuffer::SetIndices(void *indices)
 {
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, 2*nIndices, indices, GL_STATIC_DRAW);
+	if(indexBuffer == nil)
+		indexBuffer = new u16[nIndices];
+	memcpy(indexBuffer, indices, 2*nIndices);
+}
+
+// the geometry read-back (pddiPrimBuffer): positions are at offset 0 of the vertex
+const float*
+glPrimBuffer::GetPositions(u32 *strideBytes)
+{
+	if((vertexFormat & PDDI_V_POSITION) == 0)
+		return nil;
+	*strideBytes = stride;
+	return (const float*)vertexBuffer;
 }
 
 void

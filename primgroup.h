@@ -47,6 +47,9 @@ public:
 	virtual void SetShader(Shader *shader);
 	virtual bool IsLit(void);
 	virtual bool IsALUM(void);
+	// the geometry read-back behind p3dview's triangle picker
+	virtual u32 GetNumTriangles(void);
+	virtual bool GetTriangle(u32 i, math::Vector v[3]);
 
 	void SetPrimType(pddiPrimType primType) { mPrimType = primType; }
 	void SetPrimBuffer(pddiPrimBuffer *buf) { Assign(mPrimBuffer, buf); }

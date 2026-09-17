@@ -38,6 +38,13 @@ public:
 	virtual void SetTint(float tint) {}
 	// unknown
 
+	// not retail: the triangles of this primitive, in the primitive's own space, so
+	// that p3dview can pick a triangle instead of a bounding sphere
+	// (p3dview/explorer.cpp). 0 for anything with no readable triangle list --- a
+	// billboard quad group, the ocean's per-frame projected grid.
+	virtual u32 GetNumTriangles(void) { return 0; }
+	virtual bool GetTriangle(u32 i, math::Vector v[3]) { return false; }
+
 	void SetLayer(u32 l) { layer = l; }
 	u32 GetLayer(void) { return layer; }
 };

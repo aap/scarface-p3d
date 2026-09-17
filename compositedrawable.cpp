@@ -217,6 +217,13 @@ CompositeDrawableLoader::LoadObject(IRefCount **pObject, u32 *pUID, ChunkFile *f
 			// TODO: other types
 // need assert later
 //			assert(drawable);
+			// A composite element that resolves to nothing is a hole in the
+			// map: either a drawable type this loader does not know (only
+			// type&1 = Geometry and type&8 = BillboardObject are handled) or a
+			// name that is not in the inventory. P3D_VERBOSE names both.
+			if(drawable == nil && getenv("P3D_VERBOSE"))
+				printf("\tcomposite %s: element %d \"%s\" type %x unresolved\n",
+					name, count, childName, type);
 if(drawable) {
 			// TODO: makeCopy
 			drawable->SetFlags();
