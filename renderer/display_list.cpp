@@ -786,7 +786,44 @@ Display_List::RenderShadowVolumes_61_63_64(void)
 void Display_List::RenderSpecularPass2_15_13(void)	{ RenderCulledList(15, false); RenderCulledList(13, false); }
 
 void Display_List::RenderFading_41_45(void)		{ RenderCulledList(41, true); RenderCulledList(45, true); }	// retail: 0x45ce00
-void Display_List::RenderUnlit_38_37(void)		{ RenderCulledList(38, true); RenderCulledList(37, true); }	// retail: 0x45c3c0
+// retail: 0x45c3c0 --- list 38 (unlit, ALUM, sorted blend) then 37, both once, with
+// z-write on and no state of their own.
+//
+// The eco-prop foliage does not reach this bucket in retail: InstancePrimitive takes
+// layers 40..42 (lists 72..74) and the pddi instancing extension draws it. We have no
+// instancing, so InstanceRenderable sorts its prims like world geo and every blended
+// leaf ends up here --- in a tree-heavy zone over 99% of list 38 is
+// <model>InstanceShape / <model>LODShape. This is therefore where retail's instancing
+// state has to be reproduced. d3dExtInstancing::DrawInstanced (0x650810) draws each
+// instanced shape TWICE:
+//
+//   pass A  SetZWrite(false) + SetColourWrite(1,1,1,0)   (0x650901/0x65090f)
+//           the blended leaves --- so the transparent half of a leaf quad never
+//           writes depth, which is what stops the foliage punching holes through
+//           everything drawn after it
+//   pass B  z-write back on (0x650982) + SetColourWrite(0,0,0,1), with
+//           g[0x830a31] = 1 (0x6508f2), which makes d3dSimpleShader::SetPass
+//           (0x65c043..0x65c0b4) alpha-TEST every unlit alpha-blend shader at
+//           GREATEREQUAL 228/255 instead of blending it: depth (and the frame-buffer
+//           alpha mask) from the near-opaque core of the leaves only
+//
+// Pass B writes no colour for us --- we do not use the frame buffer's alpha as a mask
+// --- so it is a pure depth fill. See re/notes/zwrite.md.
+void
+Display_List::RenderUnlit_38_37(void)
+{
+	context->SetZWrite(false);
+	RenderCulledList(38, true);
+	context->SetZWrite(true);
+
+	pddiInstancedDepthPass = true;
+	context->SetColourWrite(false, false, false, false);
+	RenderCulledList(38, true);
+	context->SetColourWrite(true, true, true, true);
+	pddiInstancedDepthPass = false;
+
+	RenderCulledList(37, true);
+}
 
 // retail: 0x45c590 --- additive/blend-add (neons, tunnel lights), z-write off around the
 // last three lists in Render()

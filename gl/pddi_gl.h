@@ -213,8 +213,6 @@ class glDecalShader : public glShader
 {
 public:
 	virtual const char *GetType(void) { return "decal"; }
-	virtual void PreRender(void);
-	virtual void PostRender(void);
 	virtual void SetPass(int pass);
 };
 
@@ -240,7 +238,6 @@ class glShadowDecalShader : public glShader
 {
 public:
 	virtual const char *GetType(void) { return "shadowdecal"; }
-	virtual void PreRender(void);
 	virtual void PostRender(void);
 	virtual void SetPass(int pass);
 };
@@ -249,6 +246,8 @@ public:
 // alpha blended, ambient white / emissive black by default, and its vertex shader gets
 // the constants (200, 250, 0.1, ...) --- read as a fade-in band by distance from the
 // camera. The low-LOD city is drawn with it, so it vanishes where the real geometry is.
+// It also always alpha-tests at GREATEREQUAL 20/255, which is what keeps the faded-out
+// hull out of the depth buffer (re/notes/zwrite.md).
 class glVertexFadeShader : public glShader
 {
 public:

@@ -118,7 +118,15 @@ glShader::SetPass(i32 pass)
 	state->SetTexture(baseTex);
 	state->SetMaterial(isLit, twoSided, colours);
 	state->SetAlphaBlend(blendMode);
-	state->SetAlphaTest(alphaTest, alphaCompare, alphaRef);
+	// retail d3dSimpleShader::SetPass 0x65c043: while the instancing extension's
+	// depth/alpha pass is running (g[0x830a18] && g[0x830a30] && g[0x830a31]), an
+	// unlit alpha-blend shader is drawn alpha-TESTED at GREATEREQUAL 228/255 instead
+	// of blended --- only the near-opaque core of a leaf goes into the depth buffer
+	// (0x65c072 loads the ref from f[0x7f0908]; 0x65c059 is the !isLit test).
+	if(pddiInstancedDepthPass && blendMode == PDDI_BLEND_ALPHA && !isLit)
+		state->SetAlphaTest(true, PDDI_COMPARE_GREATEREQUAL, PDDI_INSTANCED_DEPTH_REF/255.0f);
+	else
+		state->SetAlphaTest(alphaTest, alphaCompare, alphaRef);
 	state->SetVertexFade(0.0f, 0.0f, false);
 	state->SetFogged(isFogged);
 }
@@ -133,22 +141,31 @@ void
 glVertexFadeShader::SetPass(i32 pass)
 {
 	glShader::SetPass(pass);
-	if(IsShadervisible(GetType()))
+	if(IsShadervisible(GetType())) {
 		state->SetVertexFade(200.0f, 250.0f, true);
+		// retail d3dVertexFadeShader::SetPass (0x709a30) hard-wires three things
+		// regardless of the shader's own params: the blend mode (table_7ec848[1] =
+		// PDDI_BLEND_ALPHA at 0x709bbc --- the data says BLMD 1 anyway) and, at
+		// 0x709bc4..0x709c2c, D3DRS_ALPHATESTENABLE = 1, D3DRS_ALPHAFUNC =
+		// table[GREATEREQUAL] = D3DCMP_GREATEREQUAL and D3DRS_ALPHAREF = 0x14.
+		// That alpha test is what keeps the low-LOD hull out of the depth buffer:
+		// the list it lands in (2) is drawn blended with z-write ON, and within the
+		// fade band it is completely transparent, so without the test it writes
+		// depth over the whole silhouette of the island and everything drawn after
+		// it --- the eco-prop foliage above all --- disappears inside that hull.
+		state->SetAlphaTest(true, PDDI_COMPARE_GREATEREQUAL, 20.0f/255.0f);
+	}
 }
 
 
-// TODO: these are wrong. zwrite is handled at a higher level
-void
-glDecalShader::PreRender(void)
-{
-	glDepthMask(GL_FALSE);
-}
-void
-glDecalShader::PostRender(void)
-{
-	glDepthMask(GL_TRUE);
-}
+// z-write is display-list state, not shader state: on PC the only per-draw writer of
+// D3DRS_ZWRITEENABLE is d3dContext::SetZWrite (0x64b990, context vslot +0x118), and the
+// only shader that calls it is d3dShadowDecalShader (below). d3dDecalShader::SetPass
+// (0x709380) leaves it alone --- the decal lists are z-write-bracketed by
+// Display_List::Render instead (lists 3, 17, 18, 4, 75, 5, 19, 20, 6). So no PreRender /
+// PostRender here. Retail's alpha test for a blended decal is NOTEQUAL with ref 0
+// (0x7093a0: D3DRS_ALPHATESTENABLE = 1, 0x7093c5: ALPHAFUNC = table[0x7ec920] =
+// D3DCMP_NOTEQUAL, 0x7093e9: ALPHAREF = 0).
 void
 glDecalShader::SetPass(i32 pass)
 {
@@ -158,19 +175,17 @@ glDecalShader::SetPass(i32 pass)
 	}
 	glShader::SetPass(pass);
 	if(blendMode == PDDI_BLEND_ALPHA)
-//		state->SetAlphaTest(true, PDDI_COMPARE_NOTEQUAL, 0.0f);
 		state->SetAlphaTest(true, PDDI_COMPARE_GREATER, 0.0f);
 }
 
-void
-glShadowDecalShader::PreRender(void)
-{
-	glDepthMask(GL_FALSE);
-}
+// The shadow decal shader, on the other hand, really does own its z-write in retail:
+// d3dShadowDecalShader::SetPass tail-jumps ctx->SetZWrite(false) (0x709342) and
+// ::PostRender (0x7090f0) calls ctx->SetZWrite(true). Go through the context so its
+// cached flag stays in step with the GL state.
 void
 glShadowDecalShader::PostRender(void)
 {
-	glDepthMask(GL_TRUE);
+	context->SetZWrite(true);
 }
 void
 glShadowDecalShader::SetPass(i32 pass)
@@ -181,8 +196,8 @@ glShadowDecalShader::SetPass(i32 pass)
 	}
 	glShader::SetPass(pass);
 	if(blendMode == PDDI_BLEND_ALPHA)
-//		state->SetAlphaTest(true, PDDI_COMPARE_NOTEQUAL, 0.0f);
 		state->SetAlphaTest(true, PDDI_COMPARE_GREATER, 0.0f);
+	context->SetZWrite(false);
 }
 
 

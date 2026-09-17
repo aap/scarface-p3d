@@ -333,6 +333,16 @@ struct pddiDebugOptions
 };
 extern pddiDebugOptions pddiDebug;
 
+// retail g[0x830a30] ("instanced draw in progress") and g[0x830a31] ("this is the
+// depth/alpha pass of it"), the two globals d3dExtInstancing::DrawInstanced (0x650810)
+// sets around its two passes and d3dSimpleShader::SetPass (0x65c043) reads: while they
+// are set, every unlit alpha-BLEND simple shader is drawn alpha-TESTED with
+// GREATEREQUAL and ref f[0x7f0908] = 228 instead. That is the pass that puts the
+// near-opaque core of the eco-prop foliage into the depth buffer; the blended pass
+// runs with z-write off. See re/notes/zwrite.md.
+extern bool pddiInstancedDepthPass;
+enum { PDDI_INSTANCED_DEPTH_REF = 228 };	// retail f[0x7f0908]
+
 class pddiContext : public pddiObject
 {
 public:
