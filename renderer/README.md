@@ -212,7 +212,7 @@ state once per bucket instead of once per object. Roughly:
 | depth only | 58 | a pure z-fill, colour write off |
 | unused | 48, 57 | no writer, no reader |
 
-Three details that are easy to get wrong:
+Four details that are easy to get wrong:
 
 1. `listDirty[]` is a **dirty flag**, not "has content". `AddContainerElement` sets it, the
    sort pass sorts the list and clears it again, so an untouched list is not re-sorted. The
@@ -226,6 +226,42 @@ Three details that are easy to get wrong:
    decals and light sets, `CmpKey` for the sky. `sortKey` is the fade/priority class
    (0.0, 0.5, 1.0, and 1.0 for anything fading), so fading geometry is always drawn before
    non-fading geometry in the same bucket.
+4. **Z-write is display-list state.** On PC the only per-draw writer of
+   `D3DRS_ZWRITEENABLE` is `d3dContext::SetZWrite` (`0x64b990`, context vslot `+0x118`);
+   `d3dSimpleShader::SetPass` never touches it, and the `ZWRT` / `ZTST` shader params that
+   the eco-prop `.p3d` files carry do not exist in the executable at all (no entry in the
+   parameter table at `0x7f0700`), so the viewer is right to ignore them. The lists retail
+   draws with z-write off are exactly 46, 47 (sky), 7, 8, 77 (shadow decals), 9, 10 (env),
+   3, 17, 18, 4, 75 and 5, 19, 20, 6 (decals), 11, 12 (night) and 39, 30, 24 (additive) —
+   `re/notes/zwrite.md` lists every bracket with its address. The one shader that owns its
+   own depth state is `d3dShadowDecalShader` (`SetPass` tail-jumps `SetZWrite(false)`,
+   `PostRender` restores it), which is why `gl/glshader.cpp` still does that there and
+   nowhere else.
+
+### Transparency: the two alpha-punch-through fixes
+
+Both of these are in `re/notes/zwrite.md` with the disassembly behind them.
+
+* **The low-LOD hull** (`islands_LOD.p3d`, world-geo kind `LOW_LOD`, the `vertexfade`
+  shader, list 2) is drawn blended *with z-write on*, and its vertex shader fades it out
+  towards the camera — so from close up it is a completely transparent hull over the whole
+  island. What keeps it out of the depth buffer is an alpha test
+  `d3dVertexFadeShader::SetPass` (`0x709a30`) turns on unconditionally: GREATEREQUAL with
+  ref 20/255. Without it everything drawn after list 2 disappeared inside the hull — most
+  visibly every tree crown behind the boathouse at Tony's mansion, which left the trunks
+  standing as bare sticks.
+* **The eco-prop foliage.** Retail never draws it through a plain list walk:
+  `InstancePrimitive` takes layers 40..42 (lists 72..74) and the pddi instancing extension
+  draws every instanced shape **twice** (`d3dExtInstancing` `[+0x10]`, `0x650810`) — a
+  colour pass with `SetZWrite(false)` + `SetColourWrite(1,1,1,0)`, then a depth/alpha pass
+  with z-write back on, `SetColourWrite(0,0,0,1)` and the shader forced to alpha-test at
+  GREATEREQUAL 228/255 (`d3dSimpleShader::SetPass` `0x65c043`, gated on `g[0x830a31]`).
+  So the transparent part of a leaf quad never writes depth, and only its near-opaque core
+  occludes. Because we have no instancing, `InstanceRenderable` sorts its prims like world
+  geo and the blended leaves land in **list 38** (>99% of it), so `RenderUnlit_38_37`
+  reproduces the two passes there; `pddiInstancedDepthPass` is the viewer's `g[0x830a31]`.
+  Before this, one crown's own leaf quads z-rejected each other inside a single draw call
+  and every tree looked half-empty.
 
 ## Coordinates in the viewer
 

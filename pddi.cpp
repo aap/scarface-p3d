@@ -9,6 +9,8 @@ namespace pure3d
 
 pddiDebugOptions pddiDebug = { false, false, false, false };
 
+bool pddiInstancedDepthPass;
+
 pddiDevice *device;
 pddiContext *context;
 
