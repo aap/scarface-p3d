@@ -2,6 +2,7 @@
 #include "loadstream.h"
 #include "chunkfile.h"
 #include "loadmanager.h"
+#include "rcf.h"
 #include "entity.h"
 
 #include <string.h>
@@ -151,13 +152,12 @@ P3DFileHandler::LoadFile(LoadOptions *options, LoadRequest *req)
 {
 	LoadStream *stream = req->GetStream();
 	if(stream == nil) {
-printf("opening file %s\n", options->filename);
-		// not accurate
-		stream = new LoadStream(options->filename);
-		if(!stream->IsOpen()) {
+		// not accurate: retail hands the name's hash to the cement library and
+		// gets an async read back. OpenContentFile is the same resolution order
+		// (the mounted cement.rcf first, loose files after it; rcf.cpp).
+		stream = OpenContentFile(options->filename);
+		if(stream == nil) {
 			fprintf(stderr, "couldn't open file %s\n", options->filename);
-			stream->AddRef();
-			stream->Release();
 			return;
 		}
 		req->SetStream(stream);

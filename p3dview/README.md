@@ -1,0 +1,103 @@
+# `p3dview` — how to run it
+
+A viewer for the world of *Scarface: The World Is Yours* (PC). It loads the game's data
+straight out of `cement.rcf`, the one archive the game ships everything in, so nothing has
+to be unpacked first.
+
+## Build
+
+```sh
+make -f Makefile.gl -j8         # the engine + renderer -> p3d_gl.a
+make -C p3dview -j8             # the viewer (needs SDL2 and imgui; IMGUI_DIR in p3dview/Makefile)
+```
+
+## Run
+
+```sh
+cd p3dview
+./p3dview -rcf /path/to/Scarface/cement.rcf
+```
+
+`cement.rcf` sits next to `Scarface.exe` in the installed game (a 1.5 GB "ATG CORE CEMENT
+LIBRARY"; the retail PC disc, the Steam and the GOG builds all have the same one). The
+viewer only reads it, and only the files it needs.
+
+Where it looks, in order:
+
+1. `-rcf <path>`
+2. `$P3D_RCF`
+3. `./cement.rcf`, `../cement.rcf`
+4. no archive: the extracted tree under `../assets` (`packages/z04/*.p3d`,
+   `art/levels/z04/streamgraph.p3d`), e.g. from
+   `python3 re/rcf.py <cement.rcf> extract assets packages\\z04`
+
+The two are interchangeable — with the same archive and the same tree the viewer renders
+the same frame. A file that is not in the archive is still looked up on disk, so a single
+edited `.p3d` can be dropped into `../assets/packages/z04/` to override the archive's.
+`P3D_VERBOSE=1` prints where every file came from (`packages/z04/Common.p3d <- …`).
+
+The path inside the archive is what the game uses, `packages\z04\Common.p3d` and
+`art\levels\z04\streamgraph.p3d`; names are looked up by the archive's own case-insensitive
+hash, so spelling and `/` vs `\` do not matter (`rcf.h`, `re/notes/ps2.md` §1).
+
+## Controls
+
+| | |
+|---|---|
+| `W` `A` `S` `D` | fly: forward / left / back / right (the speed ramps up while held) |
+| left drag | look around |
+| ctrl + left drag | move forward/back |
+| middle drag | pan |
+| alt + middle drag | orbit the target |
+| ctrl + middle drag | zoom |
+| ctrl + left click | pick what is under the cursor (Explorer ▸ Selection) |
+| `P` | print the camera position on stdout (for `P3D_CAMPOS`) |
+| `E` | hide / show the Explorer windows (clean screenshots) |
+
+The Explorer's **World** tab is the stream graph: regions, their subzones and the packages
+each keeps resident, with `go` (jump there), `pin` (keep loaded) and `glb` (export with
+`re/p3d2gltf.py`). **Files** lists what is loaded, package by package, **Renderables**
+every renderable in the scene, and **View** the sky, fog, ocean and display-list switches.
+
+## Environment
+
+The whole app is scriptable through the environment, which is how the screenshots in
+`screens/` are made.
+
+| | |
+|---|---|
+| `P3D_RCF=<path>` | the cement archive (same as `-rcf`) |
+| `P3D_VERBOSE=1` | where each file came from, what each package loaded, light/shape details |
+| `P3D_GUI=0` | start with the Explorer hidden |
+| `P3D_CAMPOS="x y z"`, `P3D_CAMTARGET="x y z"` | the start camera |
+| `P3D_CAMPOS2="x y z"` | jump there half way through a `P3D_SHOT` run (exercises streaming) |
+| `P3D_SHOT=file.png`, `P3D_SHOTFRAME=n` | save a screenshot after n frames, then quit |
+| `P3D_STREAM=0` | no streaming: load the whole static package list instead |
+| `P3D_TIME=<hours>` (`P3D_TIMEOFDAY=<0..1>`) | the point on the time-of-day curve (noon by default) |
+| `P3D_RAIN=1` | the `zone_rainlights` light group |
+| `P3D_NOGAMELIGHTS=1`, `P3D_NOFOG=1`, `P3D_NOSKYFOG=1` | keep the game's lights / the distance fog / the fogged sky horizon out of it |
+| `P3D_FLARES=1`, `P3D_SKYHIDE=a,b,c` | lens flares on; hide sky elements by name substring |
+| `P3D_SEALEVEL=<y>`, `P3D_NOWAVES=1`, `P3D_NODETAIL=1`, `P3D_OCEANGRID=1` | the ocean |
+| `P3D_HIDELIST=a,b,c` | hide display lists by number (see `renderer/README.md` § The 84 lists) |
+| `P3D_DEBUGRENDER=notex,nolight,novcol,wire`, `P3D_DEBUGOVERLAY=1`, `P3D_SELECT=<name>` | debug drawing, the overlay, and an object selected at startup |
+| `P3D_DEBUGMODEL=<name>`, `P3D_ONLYMODEL=<name>` | restrict eco-prop instance rendering to one model |
+
+Example (a scripted screenshot, no GUI, straight from the archive):
+
+```sh
+cd p3dview
+P3D_RCF=~/games/Scarface/cement.rcf P3D_GUI=0 \
+P3D_CAMPOS="1829 40 -627" P3D_CAMTARGET="1700 60 -800" \
+P3D_SHOT=../screens/shot.png P3D_SHOTFRAME=20 ./p3dview
+```
+
+## What reads what
+
+* `rcf.h` / `rcf.cpp` — the archive (`content::RCFArchive`, `content::MountRCF`) and the
+  name resolution every load goes through (`content::OpenContentFile`: the mounted archive
+  first, then loose files under the content roots). `'P3DZ'` entries are LZR-decompressed
+  transparently, though no shipped archive has one.
+* `p3dview/streaming.cpp` — the stream graph and the resident set; the package index (the
+  graph's lower-case names -> real file names) comes from the archive's name table, or from
+  `readdir` of the extracted tree.
+* `renderer/README.md` — what actually draws the frame.

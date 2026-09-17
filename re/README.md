@@ -25,6 +25,10 @@ Helpers
   python3 p3dhex.py <file> <chunkid> <n>          hexdump first n chunks of that id
   python3 p3dblock.py <file> <classname|objname>  decode a 0x09900190 script-object block
   python3 rcf.py <cement.rcf> list|extract <outdir> [substr]
+                                 the archive reader. Only needed for extracting now: the
+                                 C++ viewer reads cement.rcf itself (../rcf.h, p3dview -rcf
+                                 <cement.rcf>), and p3d2gltf.py still wants loose files
+                                 (it has its own reader and takes file paths)
   python3 streamgraph.py [triggers|zones|regions|at X Z|json]
                                  decode art/levels/z04/streamgraph.p3d: the 297 polygon stream
                                  triggers that say which packages are resident where
@@ -146,6 +150,19 @@ Implemented in the repo from these notes (2026-09-15, renderer:: restructured 20
     The region/global libraries stay resident. View tab > Streaming shows the current triggers and the
     resident packages, with the delay and loads-per-frame knobs. P3D_STREAM=0 (or no streamgraph.p3d) loads
     the whole static list instead, as before.
+  - rcf.h/rcf.cpp: a C++ "ATG CORE CEMENT LIBRARY" reader, so the viewer runs on an unmodified install:
+    `p3dview -rcf <cement.rcf>` (or $P3D_RCF, or ./cement.rcf) mounts the 1.5 GB archive and every load
+    goes through content::OpenContentFile -- the archive first, by hash (content::CementHash ==
+    radMakeCaseInsensitiveKey32, notes/ps2.md §1), then the same name as a loose file under a content
+    root (../assets), so the extracted tree still works and one edited .p3d can override the archive.
+    Paths are the game's own cement paths now ("packages/z04/Common.p3d",
+    "art/levels/z04/streamgraph.p3d"); p3dview/streaming.cpp builds its lower-case package index from
+    the archive's name table instead of readdir. content::LoadStream can be memory backed, and 'P3DZ'
+    entries are LZR-decompressed transparently (lzr.cpp ported from the SHR source; neither shipped
+    archive has one, so it was verified against a synthetic container and p3dwalk.py's decoder).
+    Verified: the C++ directory listing is identical to rcf.py's for all 4746 PC entries, and the same
+    frame comes out byte-identical from the archive and from the extracted tree.
+    p3dview/README.md is the how-to-run (archive, keys, the P3D_* environment).
   - renderer/render_manager.* EnvManager + the pddi fog API: distance fog with the game's own
     per-time-of-day values (notes/fog.md). The twelve environment_{clear,rainy}_{4,9,12,18,21,24}
     EnvironmentObjects of scriptc/graphanims.cso and the TODObject of packages/z04/miami_lod.p3d;

@@ -7,6 +7,7 @@
 #include "loadstream.h"
 #include "chunkfile.h"
 #include "loadmanager.h"
+#include "rcf.h"
 
 #include "entity.h"
 #include "inventory.h"
