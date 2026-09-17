@@ -21,7 +21,13 @@ Everything below is about 1 and 2 — 3 needs a player/vehicle and the viewer ha
 
 ## 0. TL;DR
 
-* The shadow-decal pass **is** enabled in retail: `g_byte[0x007bfb55]`, the flag that gates lists
+* The shadow-decal pass **runs** in retail but **cannot reach the screen**: everything between
+  `Begin` and `End` goes into a scratch render target, and `End`'s full-screen multiply is drawn
+  into that same scratch target, before the frame's render target is restored and with the write
+  mask still alpha-only. The retail PC build therefore shows **no static shadow decals at all**
+  (§2.3, and the wrong polarity in §2.3 says the pass was never finished). What the code does say
+  is what it was *meant* to do, and that is what the viewer implements (§6).
+* The shadow-decal pass is at least *enabled*: `g_byte[0x007bfb55]`, the flag that gates lists
   7/8/77 in `Display_List::Render`, holds **1** in the image (§1.1). So does
   `g_byte[0x007bfa0c]`, the one that gates the real stencil begin/end of the shadow-volume pass,
   and `g_byte[0x007c0b46]`, the one `ShadowRenderable::Display`/`::Update` test. **[V]**
@@ -30,21 +36,25 @@ Everything below is about 1 and 2 — 3 needs a player/vehicle and the viewer ha
   screen-sized `D3DFMT_A8R8G8B8` render target with `SetColourWrite(0,0,0,1)` — **only the alpha
   channel is written** — and then multiplies the whole frame by that alpha with one screen-space
   quad (`SRCBLEND = ZERO`, `DESTBLEND = SRCALPHA`). §2.
-* For a single, non-overlapping decal that is *arithmetically the same thing* as blending black
-  over the ground with the decal's own alpha (`dest *= (1-a)` ≡ `mix(dest, black, a)`), which is
-  why the plain-decal approximation the viewer now does looks right. What the mask buys retail is
-  that overlapping decals do not double-darken and that nothing drawn after them can paint over
-  them.
+* What the mask is for: a decal of coverage `c` darkens by `c·c` (the decals blend into a mask
+  cleared to 0, so `mask = c·c + mask·(1-c)`), overlapping decals do not double-darken, and
+  nothing drawn after them can paint over them. Painting the decals straight onto the ground
+  instead — what the viewer did until 2026-09-17 — is the same arithmetic for a *single* layer
+  and much too dark for two. §5.6 measures what that cost.
 * The PC build is **Direct3D 9**, not D3D8: the extension talks to the device through its own
   `IDirect3DDevice9` vtable and every offset used (`+0x88` `StretchRect`, `+0x94/+0x98`
   `Set/GetRenderTarget`, `+0xac` `Clear`, `+0xe4/+0xe8` `Set/GetRenderState`, `+0x104`
   `SetTexture`, `+0x10c` `SetTextureStageState`, `+0x114` `SetSamplerState`, `+0x14c`
   `DrawPrimitiveUP`, `+0x164` `SetFVF`, `+0x170` `SetVertexShader`, `+0x1ac` `SetPixelShader`,
   and `+0x48` `GetSurfaceLevel` on a texture) lands exactly on the D3D9 vtable. **[V]**
-* **The cause of the hard cuts is the data, not the blend**: 397 of the 408 geometries that carry
-  a `shadowdecal` prim group are `details_*` world geo, whose draw distance is the *details* band
-  — **120 m with a 20 m fade** (`WorldGeoRenderable::Display`, notes/renderspine.md §4.5) — and
+* Where the decals cut off *in space* is the data: 397 of the 408 geometries that carry a
+  `shadowdecal` prim group are `details_*` world geo, whose draw distance is the *details* band —
+  **120 m with a 20 m fade** (`WorldGeoRenderable::Display`, notes/renderspine.md §4.5) — and
   only 47 of the 220 z04 packages have any shadow decals at all. §5.
+* The **black rectangles under the trees**, on the other hand, were the viewer's arithmetic and
+  not the data: every patch of a decal prim group samples one whole tree silhouette out of the
+  128×128 atlas, and it is the magnified alpha-1 core of that silhouette, painted at 75 % per
+  layer and multiplied again where patches overlap, that turns into a solid quad. §5.6.
 
 ---
 
@@ -138,7 +148,20 @@ i.e. **7** = shadow decals, **8** = the same while their world geo is cross-fadi
   * if it has a texture: `d3dState::SetTextureStage(0, D3DTOP_MODULATE, D3DTA_DIFFUSE,
     D3DTA_TEXTURE)` and the same for the alpha channel
     (`SetTextureStageAlpha(0, MODULATE, DIFFUSE, TEXTURE)`), then `SetSamplerStates(0,0)`.
-    So **colour = diffuse·texture and alpha = diffuse.a·texture.a**.
+    So **colour = diffuse·texture and alpha = diffuse.a·texture.a**. The texture args are
+    a plain `D3DTA_TEXTURE` (2), **not** `| D3DTA_COMPLEMENT` (0x12) — the decal samples
+    the coverage, never its complement. **[V]**
+  * `d3dShader::SetSamplerStates(stage, x)` (0x65b510) is, in full: `D3DTSS_TEXCOORDINDEX
+    = stage` (so **UV set 0**, and the shader data's `TCI` float never reaches D3D),
+    `D3DTSS_TEXTURETRANSFORMFLAGS = x` = **0 = D3DTTFF_DISABLE** (so **no texture
+    matrix**), then `d3dState::SetUVMode(stage, shader->uvMode)` and
+    `SetSampler(stage, shader->filter)`. `SetUVMode` (0x65afb0) writes
+    `D3DSAMP_ADDRESSU/V/W = table_7ec8fc[UVMD]`, and that table is
+    **{ 1 = D3DTADDRESS_WRAP, 3 = D3DTADDRESS_CLAMP }**: every `shadowdecal` shader in
+    z04 has `UVMD 0`, i.e. the atlas **tiles**, exactly as GL's default `GL_REPEAT` does.
+    Nothing in the pass transforms, offsets or re-indexes the decal UVs. **[V]**
+  * texture stage 1 is disabled (`COLOROP`/`ALPHAOP = D3DTOP_DISABLE`) — and when the
+    shader has *no* texture it is stage **0** that gets disabled. **[V]**
   * `D3DRS_SPECULARENABLE = 0`, `D3DRS_SHADEMODE` from the shader, `d3dState::SetMaterial(...)`,
     then `0x65b4a0` = the ordinary `SetAlphaBlend(blendTable[effectiveBlendMode])` +
     `SetAlphaTest(...)`.
@@ -185,8 +208,13 @@ i.e. **7** = shadow decals, **8** = the same while their world geo is cross-fadi
 
 The two creations go through the helpers `0x655180(h, w, 1, 1, 0x15, &shadowTex, 1.0f)` and
 `0x655300(h, w, 0x15, ..., &shadowSurf, 1.0f)` with `w/h` from `ctx[0x21c]->GetWidth()/
-GetHeight()` (`+0x34`/`+0x38`), i.e. **one screen-sized ARGB8 render target**. **[V for the
-format and the size, [?] for which helper makes the texture and which the surface]**
+GetHeight()` (`+0x34`/`+0x38`), i.e. **two** screen-sized ARGB8 objects, and which helper
+makes which is settled by the device vtable slot each one calls: `0x655180` calls
+`dev+0x5c` = `IDirect3DDevice9::CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8,
+pool, &shadowTex, nil)` and `0x655300` calls `dev+0x70` = `CreateRenderTarget(w, h,
+D3DFMT_A8R8G8B8, multisample, 0, lockable, &shadowSurf, nil)` — 8 arguments each, both
+offsets land on the right D3D9 slot. So `+0x20` is a **texture** and `+0x28` a **separate
+render-target surface**; they are not two views of the same memory. **[V]**
 
 ### 2.2 `Begin()` — 0x0065cf60 **[V]**
 
@@ -227,29 +255,50 @@ dev->SetTextureStageState(1, D3DTSS_COLOROP/ALPHAOP, D3DTOP_DISABLE);
 dev->SetTexture(1..3, nil);
 dev->SetVertexShader(nil); dev->SetFVF(0x104); dev->SetPixelShader(nil);
 dev->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, 0x18);       // +0x14c
+// --- only now, after the quad:
 ctx->SetColourWrite(true,true,true,false);
 dev->SetRenderTarget(0, savedRT);  savedRT->Release();
 RestoreRenderStates();
 ```
 
-**The composite is `frame_rgb *= shadowbuffer_alpha`, fixed function, one triangle strip.** That
-is the whole of "how the static shadows get onto the screen" on PC. **[V for every state above]**
+Every state above is read out of the disassembly, and so is the order. **[V]** Which settles both
+of the questions this note used to leave open — and not the way one would hope:
 
-Two things I could not pin down and that a re-implementation should treat as open:
+### The pass cannot touch the frame. On PC it is a no-op. **[V]**
 
-1. **The polarity.** Taken literally, `Begin` clears the shadow buffer's alpha to 0 and the decals
-   raise it towards 1 (their alpha is coverage, §1.4), while `End` multiplies the frame by that
-   alpha — which would darken everything *except* the shadows. So either the `Clear` is meant to
-   run under the alpha-only write mask and leave alpha at 1, or the `StretchRect` of the saved
-   render target into the shadow texture (which is what the code reads as) seeds the buffer with
-   the frame's own alpha channel — the frame-buffer alpha *is* a mask the rest of the frame
-   maintains (`notes/displaylist.md` §1 step 3 clears it, almost every pass protects it with
-   `SetColourWrite(1,1,1,0)`). I read the surface ping-pong as `savedRT -> shadowTex`, which only
-   makes sense with that second reading. **[?]**
-2. Whether `washShader` (`+0xc4`, blend `PDDI_BLEND_MODULATE`) and `washColour` (`+0xc8`) are used
-   by `End()` at all — the quad above is drawn through raw D3D9 calls and neither appears in it.
-   They are almost certainly for the stencil-volume path (§4), where `Display_List` *does* call
-   `SetWashColour`. **[?]**
+Three independent facts, all of them in the listing above:
+
+1. `Begin` points the render target at `shadowSurf` (`+0x28`), a render target of its **own**
+   (§2.1), so the decals never write the frame buffer's alpha.
+2. `End`'s `StretchRect` goes **`savedRT` → `shadowTex`**: source is `[this+0x2c]`, the render
+   target `Begin` saved (the frame), destination is `shadowTex->GetSurfaceLevel(0)`. The argument
+   order is unambiguous (`push 2` filter, `push 0` destRect, `push eax` = the texture's surface,
+   `push 0` srcRect, `push ecx` = `[this+0x2c]`, `push esi` = the device). So the texture the
+   composite samples is a **copy of the frame**, not the mask the decals just drew into; the
+   contents of `shadowSurf` are never read by anything.
+3. The composite quad is drawn **before** `SetRenderTarget(0, savedRT)` and **before**
+   `SetColourWrite(1,1,1,0)` — i.e. into `shadowSurf`, with the write mask still alpha-only.
+
+So the whole of group 10 renders into a scratch surface that is thrown away, and the frame comes
+out of `End()` bit-identical to the way it went in. **The retail PC build draws no static shadow
+decals at all.** That also explains why nobody ever fixed the two things §5 measures (97 % of the
+decals live in the 120 m details band, and only 47 of 220 packages have any): on PC they were
+never visible.
+
+The polarity question answers itself from the same listing, and confirms the reading: the mask
+holds **coverage** (cleared to 0 by `Begin`, raised by the decals), and `notes/displaylist.md` §1
+step 3 fills the *frame's* alpha mask with `SetClearColour(0x01000000)` = alpha **1/255**, i.e.
+"0 = lit" in both buffers. A composite of `frame *= mask` is therefore the wrong way round in
+either buffer — it needs the complement, `frame *= 1 - mask`, which is what
+`D3DTA_TEXTURE|D3DTA_COMPLEMENT` or `DESTBLEND = INVSRCALPHA` would have given and what neither
+does. A re-implementation should use the complement: it is the only polarity the data supports.
+**[V]**
+
+And `washShader` (`+0xc4`, `PDDI_BLEND_MODULATE`) with `washColour` (`+0xc8` = **0xff808080**) is
+the one number the extension gives for *how dark* a static shadow is meant to get: the
+stencil-volume path (§4) is handed its own colour by `Display_List` (`SetWashColour(0xff191919)`)
+before `BeginStencilVolumes`, so the ctor's `0xff808080` belongs to the path that never sets it —
+the static decals. Half brightness is the cap. **[V for the values, [?] for the attribution]**
 
 ---
 
@@ -448,12 +497,58 @@ Consequences, in the order they matter:
 4. Not a cause: the blend. `blmd1` + a black texture with alpha = coverage is exactly what the
    retail mask arithmetic amounts to for a single decal (§0), and the decal geometry is authored
    far enough above the ground that it does not z-fight.
-5. Ordering *is* a real second-order problem for the plain-decal approximation: the pass runs in
+5. Ordering *is* a second-order problem for the plain-decal approximation: the pass runs in
    group 10, before the lit world geo (list 49) and before all the fading buckets, and with
    z-write off but z-test on a later coplanar ground polygon can paint over a decal. Retail does
    not care because it accumulates a mask instead of painting pixels. In practice the ground under
    the decals is in lists 52/53/13/15/21/27/28 (groups 3, 4, 7), all of which are drawn *before*
    group 10, so this does not bite in Little Havana or North Beach.
+
+### 5.6 What a decal patch actually samples — measured **[V]**
+
+The dark straight-edged quadrilaterals aap saw at the Little Havana strip mall
+(`P3D_CAMPOS="1910.3 32.0 -990.3"`) are **not** a UV bug. Taking
+`collapsedMesh_0_details_stripD_*` of `stripmall_01_detail.p3d` apart vertex by vertex
+(a scratch script over the `0x00010007` UV lists):
+
+* the prim group is `fmt 0x2021` = `PDDI_V_POSITION | PDDI_V_COLOUR | UVCOUNT1`: exactly **one**
+  UV set, one colour list, no normals, `PDDI_PRIM_TRIANGLES` with a plain 32-bit index list, and
+  every list's chunk is exactly `4 + n*stride` bytes for the group's own `n` — there is no second
+  UV or colour set that could shift what the shader samples;
+* every decal vertex colour is **0xff000000**: black, alpha 255. With the stage setup of §1.4
+  that makes `colour = black` and `alpha = texture.a`;
+* the shader params are `TEX=r_tree_shadow.tga, BLMD=1, UVMD=0, TCI=0, ALUM=0, 2SID=0, LIT=0`,
+  and per §1.4 none of `UVMD`/`TCI` moves a UV (`UVMD 0` = tile = GL's default);
+* a group is **not** one quad. It is the collapsed ground polygons under several trees, 4..180
+  triangles, and its triangles fall into **edge-connected patches** — 9 of them in
+  `stripD_000`, 22 in `stripD_002` — one patch per shadow. Each patch's UVs stay inside **one**
+  cell of the 128×128 atlas; the recurring cells at this spot are `u 0.00..0.27 × v 0.59..1.00`,
+  `u 0.00..0.69 × v 0.00..0.70`, `u 0.74..1.00 × v 0.06..0.59` and a tiny
+  `u 0.02..0.08 × v 0.73..0.87`, on ground patches 1..20 m across;
+* those `v` are **after** the viewer's V flip, and the flip is what makes them fit. Sampling a
+  3 % band just outside each cell: flipped, the bands read alpha 0.00..0.05 (the silhouette sits
+  inside its cell with a transparent margin); unflipped the same bands read 0.55..0.72, i.e. the
+  shape runs straight off the cell edge. So `1-v` is right and the cells the patches name are
+  whole tree silhouettes. Of the 438 patches in the six packages resident at that camera, **437**
+  sample a cell that is a silhouette (< 60 % of the cell at alpha 1).
+
+What made them read as black rectangles was therefore the **arithmetic**, and it was the viewer's,
+not the data's. Measured on the frame (every pixel of `screens/sd_before1.png` against the same
+frame with `P3D_HIDELIST=7`): 33 % of the darkened pixels were at ≤ 0.3 of their unshaded
+brightness, 4 % below 0.2. Two reasons, in the order they cost:
+
+1. the viewer painted `strength · c²` of black **per decal** with `strength = 0.75`, so one layer
+   at full coverage already darkened by 75 %. The atlas is 26 % alpha-1 texels and one cell of
+   ~35×50 texels is stretched over a 10..20 m ground patch, so the dense core of a silhouette
+   becomes square metres of *solid* black whose outline is the patch polygon. That is the
+   rectangle, and the "leafy blob inside it" is the sparse part of the same or the neighbouring
+   patch;
+2. no mask: 48 % of the covered ground is covered by two to four patches, and painting them one
+   after another multiplies (0.25² = 0.06 of the original brightness for two).
+
+With the mask of §2 and its 0xff808080 cap both go away: nothing comes out darker than 0.5 and
+overlapping patches saturate instead of compounding — 55 % of the darkened pixels sit exactly at
+the 0.5 cap (`screens/sd_after1.png`).
 
 ---
 
@@ -471,10 +566,31 @@ so **the building shadows of §4 are loaded but not drawn**. Drawing them needs,
 `LightManager`'s sun with the 6 m volume length, and the two-pass stencil + wash of §4. None of
 that exists yet.
 
-The shadow decals of §1 *are* drawn: lists 7/8/77 are on by default,
+The shadow decals of §1 *are* drawn — which is already more than retail does (§2.3) — and since
+2026-09-17 they go through the mask, not onto the ground. Lists 7/8/77 are on by default,
 `Display_List::RenderShadowDecals_7_8_77` follows §1.2 (z-write off, cull 7/8, container fade on
-8/77), and the retail alpha-mask + full-screen multiply of §2 is approximated by letting the
-decals blend straight onto the ground with their own alpha, which is arithmetically the same for
-a single decal layer. The per-primitive fade of §5.2 is implemented for the shadow decal shader
+8/77) and brackets the pass with `pddiContext::Begin/EndStaticShadows`
+(`pddi.h`, `gl/gl.cpp`), which is retail's extension 0x108 with two changes:
+
+* the mask lives in the **frame buffer's own alpha channel** instead of a render target of its
+  own (`p3dview/main.cpp` asks SDL for `SDL_GL_ALPHA_SIZE = 8`). `Begin` is then literally
+  retail's: `SetColourWrite(0,0,0,1)` and an alpha-only `glClear` to 0, after which the decals'
+  own `PDDI_BLEND_ALPHA` accumulates `mask = c·c + mask·(1-c)` — the c² of §1.4 comes out of the
+  blend, so the fragment shader writes the plain coverage (`u_shadowDecal.w`,
+  `gl/shaders/shader.frag`). `End` is two full-screen quads: `mask *= strength` with
+  `(GL_ZERO, GL_SRC_ALPHA)`, then `frame *= 1 - mask` with `(GL_ZERO, GL_ONE_MINUS_DST_ALPHA)`,
+  and an alpha-only clear back to 1 so the rest of the frame sees the channel it expects;
+* the polarity is the **complement** retail's own `Clear`/`DESTBLEND` pair fails to apply (§2.3),
+  and `strength` is the extension's `0xff808080` wash: **0.5**, i.e. a static shadow never
+  darkens the ground by more than half. `pddiShadowDecal` (`pddi.h`) has the knobs, View tab >
+  Shadows and `P3D_SHADOWDECAL=<strength>[,nomask]` drive them, and with no destination alpha
+  available the old approximation (paint `strength·c²` of black per decal) is the fallback.
+
+Also from the same reversal: `glShader::SetPass` now writes the wrap mode from the shader's
+`UVMD` (`glState::SetUVMode`, retail `d3dState::SetUVMode` 0x65afb0), which the viewer never did
+— it only ever used GL's default `GL_REPEAT`, which happens to be right for `UVMD 0` and wrong
+for the `UVMD 1` shaders.
+
+The per-primitive fade of §5.2 is implemented for the shadow decal shader
 (`pddiShader::SetFade`, `gl/glshader.cpp`), so the 20 m band at 120 m cross-fades like retail
 instead of popping.

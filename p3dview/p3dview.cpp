@@ -539,6 +539,13 @@ GUI(void)
 			pddiDebug.noVertexColours = strstr(dr, "novcol") != nil;
 			pddiDebug.wireframe = strstr(dr, "wire") != nil;
 		}
+		// P3D_SHADOWDECAL=<strength>[,nomask] --- the static shadow decals: how far
+		// they darken the frame (0.5 = the extension's own 0xff808080 wash) and
+		// whether they go through the alpha mask at all (View tab > Shadows)
+		if(const char *sd = getenv("P3D_SHADOWDECAL")) {
+			pddiShadowDecal.strength = atof(sd);
+			if(strstr(sd, "nomask")) pddiShadowDecal.mask = false;
+		}
 	}
 	if(!guiVisible) return;
 	ExplorerGUI();

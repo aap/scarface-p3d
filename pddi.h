@@ -328,13 +328,18 @@ public:
 extern pddiDevice *device;
 
 // debug rendering options (viewer): honoured by the backend shaders
-// not a debug option: how the static shadow decals darken the frame. Retail blends
-// them into a cleared alpha mask and multiplies the frame by it (re/notes/shadows.md),
-// which makes a decal of coverage c darken by c*c; `strength` scales that.
+// not a debug option: how the static shadow decals darken the frame. Retail does not
+// paint them onto the ground — it blends their coverage into an alpha mask and
+// multiplies the frame by the mask once (re/notes/shadows.md §2), which makes a decal
+// of coverage c darken by c*c and keeps overlapping decals from darkening twice.
 struct pddiShadowDecalOptions
 {
-	bool squareCoverage;	// c*c like the mask arithmetic (default), else c
-	float strength;		// 0.75, a guess: retail's End pass washes with 0xff808080 [?]; View tab > Shadows
+	bool mask;		// the real thing: accumulate the coverage in the frame
+				// buffer's alpha channel and multiply the frame by it
+				// once (pddiContext::Begin/EndStaticShadows)
+	bool squareCoverage;	// without the mask: darken by c*c instead of c
+	float strength;		// the cap on the darkening. The extension's own wash
+				// colour is 0xff808080 = half brightness (§2.1)
 };
 extern pddiShadowDecalOptions pddiShadowDecal;
 
@@ -384,6 +389,16 @@ public:
 	virtual void SetZTest(bool enable) {}
 	virtual bool GetZTest(void) { return true; }
 	virtual void SetColourWrite(bool r, bool g, bool b, bool a) {}
+
+	// retail: pddiExtStaticShadowGen::Begin/End, pddi extension 0x108 (d3d 0x65cf60 /
+	// 0x65d0f0, re/notes/shadows.md §2). The static shadow decals of display lists
+	// 7/8/77 are not painted onto the ground: Begin points the pass at an alpha mask
+	// that is cleared to 0 and written with colour write = alpha only, the decals
+	// blend their coverage into it, and End multiplies the frame by the mask once.
+	// HasStaticShadowMask says whether the backend can do it at all.
+	virtual bool HasStaticShadowMask(void) { return false; }
+	virtual void BeginStaticShadows(void) {}
+	virtual void EndStaticShadows(float strength) {}
 
 	// lighting. retail: pddiRenderContext +0xa8 GetMaxLights, +0xac SetAmbientLight
 	// (d3d 0x64b850, which is just D3DRS_AMBIENT), +0xb0 GetAmbientLight,

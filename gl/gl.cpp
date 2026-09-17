@@ -47,8 +47,141 @@ glContext::glContext(void)
 	worldMatrix[worldSP].Identity();
 	zWrite = true;
 	zTest = true;
+	alphaBits = -1;
+	inStaticShadows = false;
+	quadProgram = nil;
+	quadVBO = 0;
 
 	state = new glState;
+}
+
+
+// ---------------------------------------------------------------------------
+// the static shadow mask --- retail's pddiExtStaticShadowGen (pddi extension 0x108,
+// re/notes/shadows.md §2). Begin clears an alpha mask to 0 and lets the decals blend
+// their coverage into it with colour write = alpha only; End multiplies the frame by
+// the mask once. Retail keeps the mask in a screen-sized A8R8G8B8 render target of its
+// own; we keep it in the frame buffer's own alpha channel, which the D3D9 code was
+// plainly written around (notes/displaylist.md step 3 fills that channel through an
+// alpha-only clear and every later pass protects it with SetColourWrite(1,1,1,0)) and
+// which costs no render target. Two things follow from doing it at all:
+//   * overlapping decals stop darkening twice --- the mask saturates instead of the
+//     frame being multiplied once per decal;
+//   * a decal of coverage c darkens by c*c, because the mask is accumulated with the
+//     decal's own PDDI_BLEND_ALPHA: mask = c*c + mask*(1-c).
+// The cap `strength` is retail's wash colour 0xff808080 (half brightness, §2.1) scaled
+// into the mask by the first of the two full-screen quads.
+static const char *quadVertSrc =
+"#version 120\n"
+"attribute vec4 in_pos;\n"
+"void main(void) { gl_Position = in_pos; }\n";
+static const char *quadFragSrc =
+"#version 120\n"
+"uniform vec4 u_quadColour;\n"
+"void main(void) { gl_FragColor = u_quadColour; }\n";
+
+void
+glContext::DrawFullscreenQuad(const Vector4 &col)
+{
+	static const float verts[] = {
+		-1.0f, -1.0f, 0.0f, 1.0f,
+		 1.0f, -1.0f, 0.0f, 1.0f,
+		-1.0f,  1.0f, 0.0f, 1.0f,
+		 1.0f,  1.0f, 0.0f, 1.0f,
+	};
+	if(quadProgram == nil) {
+		const char *vs[] = { quadVertSrc, nil };
+		const char *fs[] = { quadFragSrc, nil };
+		quadProgram = new glProgram(vs, fs);
+		glGenBuffers(1, &quadVBO);
+		glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
+	}
+	quadProgram->Bind();
+	state->SetQuadColour(col);
+	glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+	glEnableVertexAttribArray(ATTRIB_POS);
+	glVertexAttribPointer(ATTRIB_POS, 4, GL_FLOAT, GL_FALSE, 4*4, (void*)0);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	glDisableVertexAttribArray(ATTRIB_POS);
+}
+
+bool
+glContext::HasStaticShadowMask(void)
+{
+	if(alphaBits < 0) {
+		// the default frame buffer's alpha channel is the mask, so without one
+		// there is nothing to accumulate into (and GL_DST_ALPHA would read 1 and
+		// multiply the whole frame to black)
+		GLint bits = 0;
+		glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_BACK_LEFT,
+			GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE, &bits);
+		if(glGetError() != GL_NO_ERROR || bits == 0) {
+			bits = 0;
+			glGetIntegerv(GL_ALPHA_BITS, &bits);	// GL2 / compatibility
+			glGetError();
+		}
+		alphaBits = bits;
+		if(alphaBits == 0)
+			fprintf(stderr, "no destination alpha: the static shadow decals "
+				"are painted on the ground instead of masked\n");
+	}
+	return alphaBits > 0;
+}
+
+void
+glContext::BeginStaticShadows(void)
+{
+	if(!HasStaticShadowMask())
+		return;
+	inStaticShadows = true;
+	state->SetShadowDecalMask(true);
+	// retail: SetZWrite(false), SetColourWrite(0,0,0,1), Clear(TARGET, 0x00000000).
+	// glClear honours the colour mask, so this clears the alpha channel only.
+	SetColourWrite(false, false, false, true);
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+}
+
+void
+glContext::EndStaticShadows(float strength)
+{
+	if(!inStaticShadows)
+		return;
+	inStaticShadows = false;
+	state->SetShadowDecalMask(false);
+
+	bool zt = GetZTest();
+	SetZTest(false);
+	SetZWrite(false);
+	glEnable(GL_BLEND);
+	glBlendEquation(GL_FUNC_ADD);
+
+	// mask *= strength (the 0xff808080 wash as a cap on the darkening)
+	if(strength < 1.0f) {
+		SetColourWrite(false, false, false, true);
+		glBlendFunc(GL_ZERO, GL_SRC_ALPHA);
+		DrawFullscreenQuad(Vector4(0.0f, 0.0f, 0.0f,
+			strength < 0.0f ? 0.0f : strength));
+	}
+	// frame *= 1 - mask. Retail's own composite is SRCBLEND ZERO / DESTBLEND SRCALPHA
+	// with the mask in a texture; with the mask in the frame buffer the destination
+	// alpha is the blend factor, and the complement is the polarity the pass needs
+	// (the mask holds coverage, cleared to 0 --- notes/shadows.md §2.3).
+	SetColourWrite(true, true, true, false);
+	glBlendFunc(GL_ZERO, GL_ONE_MINUS_DST_ALPHA);
+	DrawFullscreenQuad(Vector4(0.0f, 0.0f, 0.0f, 0.0f));
+
+	// leave the frame buffer's alpha the way the rest of the frame expects it (opaque:
+	// the screenshot path and any blend that reads destination alpha)
+	SetColourWrite(false, false, false, true);
+	glDisable(GL_BLEND);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	SetColourWrite(true, true, true, true);
+	SetZTest(zt);
+	SetZWrite(true);
 }
 
 void
@@ -153,6 +286,8 @@ glState::glState(void)
 	u_vertexFade = uniformRegistry.Register("u_vertexFade", UNIFORM_VEC4);
 	u_shadowDecal = uniformRegistry.Register("u_shadowDecal", UNIFORM_VEC4);
 	shadowDecal = Vector4(0.0f, 1.0f, 1.0f, 0.0f);
+	shadowDecalMask = false;
+	u_quadColour = uniformRegistry.Register("u_quadColour", UNIFORM_VEC4);
 	u_fade = uniformRegistry.Register("u_fade", UNIFORM_VEC4);
 	u_lit = uniformRegistry.Register("u_lit", UNIFORM_VEC4);
 	u_fogColour = uniformRegistry.Register("u_fogColour", UNIFORM_VEC4);
@@ -300,6 +435,26 @@ glState::SetTexture(pddiTexture *tex)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	}
 	glBindTexture(GL_TEXTURE_2D, whiteTex);
+}
+
+// retail: d3dState::SetUVMode (0x65afb0) --- the shader's UVMD reaches
+// D3DSAMP_ADDRESSU/V/W through table_7ec8fc = { D3DTADDRESS_WRAP, D3DTADDRESS_CLAMP },
+// so UVMD 0 tiles and UVMD 1 clamps. pddi addressing is per sampler; in GL it is per
+// texture object, which only differs when one texture is used by two shaders with
+// different UVMD (it is set at every SetPass, so the last one wins for that draw).
+void
+glState::SetUVMode(pddiUVMode mode)
+{
+	GLint wrap = mode == PDDI_UV_CLAMP ? GL_CLAMP_TO_EDGE : GL_REPEAT;
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap);
+}
+
+void
+glState::SetQuadColour(const Vector4 &col)
+{
+	uniformRegistry.SetUniform(u_quadColour, &col);
+	uniformRegistry.Flush();
 }
 
 

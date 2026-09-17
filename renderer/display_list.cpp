@@ -715,12 +715,17 @@ void Display_List::RenderProjectedShadows62(void)	{ RenderCulledList(62, false);
 // End() then multiplies the frame by that alpha with one full-screen quad
 // (SRCBLEND ZERO, DESTBLEND SRCALPHA). See re/notes/shadows.md §2.
 //
-// NOT retail (the one deviation): we have no render target to accumulate a mask in, so
-// the decals blend straight onto the ground with their own alpha. For a single decal
-// layer that is the same arithmetic --- dest *= (1-a) is mix(dest, black, a) --- and the
-// decal textures are exactly that: black shapes with alpha = coverage. What the mask
-// buys retail is that overlapping decals do not darken twice and that nothing drawn
-// later in the frame can paint over them.
+// pddiContext::Begin/EndStaticShadows is that pass: the GL backend keeps the mask in the
+// frame buffer's own alpha channel instead of a render target of its own (gl/gl.cpp), so
+// the arithmetic is retail's --- coverage c darkens by c*c, capped by the extension's
+// 0xff808080 wash, and overlapping decals do not darken twice. Without destination alpha
+// it falls back to blending the decals straight onto the ground with an alpha of
+// strength*c*c, which is the same thing for a single decal layer.
+//
+// One deviation is left: retail's mask also means nothing drawn after the pass can paint
+// over a shadow. Here the multiply happens at the end of the pass, so a coplanar ground
+// polygon drawn later still can (in practice the ground is in lists 52/53/13/15/21/27/28,
+// all of them earlier, so it does not bite).
 //
 // Retail also gates the pass on g[0x7bfb55] (1 in the retail image) and on lists 7/8
 // being non-empty, because Begin/End are not free; here the pass costs nothing when the
@@ -728,11 +733,17 @@ void Display_List::RenderProjectedShadows62(void)	{ RenderCulledList(62, false);
 void
 Display_List::RenderShadowDecals_7_8_77(void)
 {
+	bool mask = pddiShadowDecal.mask &&
+		(lists[7].length || lists[8].length || lists[77].length);
+	if(mask)
+		context->BeginStaticShadows();
 	context->SetZWrite(false);
 	RenderCulledList(7, false);
 	RenderCulledList(8, true);
 	RenderList(77, true);
 	context->SetZWrite(true);
+	if(mask)
+		context->EndStaticShadows(pddiShadowDecal.strength);
 }
 
 // retail: 0x45aa50 / 0x45a890 / 0x45a770 / 0x45ab20 / 0x45a7f0 / 0x45a910 / 0x45a9b0 ---

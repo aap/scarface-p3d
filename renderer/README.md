@@ -195,13 +195,24 @@ Three unrelated things (`re/notes/shadows.md` has the whole reversal):
    cross-fades) and **77**, and `Display_List::RenderShadowDecals_7_8_77` draws them with
    z-write off after the decals and before the lit world. **These are on by default.**
    Retail brackets the pass with `pddiExtStaticShadowGen::Begin/End` (pddi extension
-   `0x108`) and accumulates it as an *alpha mask* in a screen-sized `D3DFMT_A8R8G8B8` render
-   target, then multiplies the frame by that mask with one fixed-function full-screen quad
-   (`SRCBLEND ZERO`, `DESTBLEND SRCALPHA`). We have no render target, so the decals blend
-   straight onto the ground with their own alpha — the same arithmetic for a single decal
-   layer, since `dest *= (1-a)` is `mix(dest, black, a)` and the decal textures are black
-   shapes with alpha = coverage. What the mask buys retail is that overlapping decals do not
-   darken twice and that nothing drawn later in the frame can paint over them.
+   `0x108`) and accumulates it as an *alpha mask* that is cleared to 0 and written with
+   colour write = alpha only, then multiplies the frame by that mask with one
+   fixed-function full-screen quad. The viewer does the same through
+   `pddiContext::Begin/EndStaticShadows`, with the mask in the frame buffer's **own** alpha
+   channel (`SDL_GL_ALPHA_SIZE = 8`) instead of a render target of its own: the decals'
+   `PDDI_BLEND_ALPHA` accumulates `mask = c·c + mask·(1-c)`, so a decal of coverage `c`
+   darkens by `c·c`, overlapping decals saturate instead of multiplying, and one quad
+   applies `frame *= 1 - strength·mask` at the end of the pass. `strength` defaults to
+   **0.5**, the extension's own `0xff808080` wash colour — the only number in the data that
+   says how dark a static shadow is meant to get (View tab > Shadows,
+   `P3D_SHADOWDECAL=<strength>[,nomask]`). Without destination alpha it falls back to
+   painting `strength·c²` of black per decal, which is the same thing for one layer.
+   Two things worth knowing: retail's own `End()` draws its composite quad into the scratch
+   render target with the alpha-only write mask still set and only *then* restores the
+   frame's render target, so **the retail PC build shows no static shadow decals at all**
+   (`re/notes/shadows.md` §2.3) — the viewer implements what the pass was written to do, not
+   what it does; and the polarity is the complement (`1 - mask`), because the mask holds
+   coverage and is cleared to 0.
 2. **The building shadows** — the 44 `0x08800008` `*_shadow` composites, one per shell that
    casts them. `shadow.*` loads them the way retail does (layer 2 and `isBuildingShadow` on
    every primitive, no distance test, element 0 = the composite, `Display` gated on
@@ -219,6 +230,17 @@ shadowdecal prim group are `details_` world geo, i.e. the **120 m** band with a 
 the viewer had **no** cross-fade at all until `PDDI_SP_FADE` (`gl/glshader.cpp`), so that
 20 m band was a one-frame pop; and only 47 of the 220 z04 packages have any shadow decals in
 the first place, which is simply how the map was authored.
+
+Why they used to look like black *rectangles* is a different story and was the arithmetic,
+not the data (`re/notes/shadows.md` §5.6 measures it): a decal prim group is the collapsed
+ground polygons under several trees, its edge-connected patches each sample **one whole tree
+silhouette** out of a 128×128 atlas — with the V flip, verified against the silhouettes'
+own bounding boxes — and 437 of the 438 patches at the Little Havana camera name a
+silhouette rather than a solid part of the atlas. But 26 % of that atlas is at alpha 1, one
+cell of ~35×50 texels covers a 10..20 m ground patch, and the viewer painted 75 % of black
+per decal and multiplied again where patches overlap (48 % of the covered ground), so the
+dense core of a silhouette became square metres of solid black cut off at the patch
+boundary. With the mask and the 0.5 cap nothing is darker than half.
 
 ## The 84 lists
 

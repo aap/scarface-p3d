@@ -92,6 +92,7 @@ The whole app is scriptable through the environment, which is how the screenshot
 | `P3D_FLARES=1`, `P3D_SKYHIDE=a,b,c` | lens flares on; hide sky elements by name substring |
 | `P3D_SEALEVEL=<y>`, `P3D_NOWAVES=1`, `P3D_NODETAIL=1`, `P3D_OCEANGRID=1` | the ocean |
 | `P3D_HIDELIST=a,b,c` | hide display lists by number (see `renderer/README.md` § The 84 lists) |
+| `P3D_SHADOWDECAL=<strength>[,nomask]` | how dark the static shadow decals get (0.5 = the retail wash colour) and whether they go through the alpha mask (lists 7/8/77) |
 | `P3D_DEBUGRENDER=notex,nolight,novcol,wire`, `P3D_DEBUGOVERLAY=1`, `P3D_SELECT=<name>` | debug drawing, the overlay, and an object selected at startup |
 | `P3D_DEBUGMODEL=<name>`, `P3D_ONLYMODEL=<name>` | restrict eco-prop instance rendering to one model |
 
