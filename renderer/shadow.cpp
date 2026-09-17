@@ -121,6 +121,7 @@ ShadowLoader::LoadObject(IRefCount **pObject, u32 *pUID, content::ChunkFile *f, 
 				continue;
 			if(prim->GetSomeMask() == 0x20)
 				anyShadowMesh = true;
+			prim->isBuildingShadow = shadow->isBuildingShadow;
 			prim->SetLayer(2);
 		}
 	}

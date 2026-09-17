@@ -17,8 +17,12 @@ class DrawablePrimitive : public Entity
 public:
 	math::Box3D box;
 	math::Sphere sphere;
+	// retail: DrawablePrimitive+0x68, written by ShadowLoader on every primitive of a
+	// shadow composite (re/notes/shadows.md §3.1). Display_List's layer-2 case reads it
+	// to tell a building shadow from a car/NPC one.
+	bool isBuildingShadow;
 
-	DrawablePrimitive(void) : layer(0) {}
+	DrawablePrimitive(void) : layer(0), isBuildingShadow(false) {}
 
 	virtual u32 GetSomeMask(void) = 0;
 	virtual void Display(void) = 0;

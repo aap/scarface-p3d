@@ -12,8 +12,8 @@ before anything else:
 | # | what | data | layer | lists | how it is drawn |
 |---|---|---|---|---|---|
 | 1 | **static shadow decals** — the dark blobs baked into the ground geometry under trees, awnings and walls | prim groups of the world geo whose pddi shader is `shadowdecal` | 37 (or 1 for the unclassified case) | **7** / **8** (fading) / **77** | into the frame-buffer alpha channel, then one full-screen multiply (§2) |
-| 2 | **building shadow volumes** — the 44 `*_shadow` composites of chunk 0x08800008 | `0x0001001a` `pure3d::ShadowMesh` (+ `0x0001001b` topology) inside a `0x00023000` composite | **2** | **63** (`GetSomeMask()==0x20`), 64, 62 in a room, 61 | stencil shadow volumes + a dark wash (§4) |
-| 3 | blob shadows under cars and NPCs | the same chunk with `isBuildingShadow == 0`, plus two built-in blob geometries | 2 | 62/64 | `ShadowRenderable::Display` projects a quad (§3.3) |
+| 2 | **building shadow volumes** — the 44 `*_shadow` composites of chunk 0x08800008 | `0x0001001a` `pure3d::ShadowMesh` (+ `0x0001001b` topology) inside a `0x00023000` composite | **2** | **61** | stencil shadow volumes + a dark wash (§4) |
+| 3 | blob shadows under cars and NPCs | the same chunk with `isBuildingShadow == 0`, plus two built-in blob geometries | 2 | 62 / 63 / 64 | `ShadowRenderable::Display` projects a quad (§3.3) |
 
 Everything below is about 1 and 2 — 3 needs a player/vehicle and the viewer has neither.
 
@@ -298,9 +298,25 @@ Notes worth having:
   never tested: the composite is submitted from any distance and the *display list* does the
   culling (`IsNodeVisible` per node, plus the 600 m cut in the volume pass, §4). The chunk's
   `f1 = 200.0` is *not* that band either — it is never read by the loader. **[V]**
-* every shadow primitive is forced to **layer 2**, which is the only layer that reaches lists
-  61..64; `GetSomeMask() == 0x20` (a `ShadowMesh`/`ShadowSkin` primitive) is what routes it to
-  **63** rather than 64 in `AddContainerElement`.
+* every shadow primitive is forced to **layer 2**, the only layer that reaches lists 61..64. The
+  layer-2 case of `AddContainerElement` (**0x0045d66f**) is, in full **[V]**:
+
+  ```c
+  case 2: {
+      DrawablePrimitive *prim = nd->elem->prim;
+      prim->+0x48 = 6.0f;                     // SHR's tShadow::SetVolumeLength (shadow.hpp);
+                                              // 0 there means "guess from the extruded bbox"
+      if (prim->+0x68)                        //  <- isBuildingShadow, written by ShadowLoader
+          listID = 61;
+      else if (prim->GetSomeMask() == 0x20)   // a ShadowMesh / ShadowSkin primitive
+          listID = (owner->flags81 & 1) ? 62 : 63;      // 1 = the owner is inside a room
+      else                                    // the car/NPC blob quads
+          listID = (owner->flags81 & 1) ? 62 : 64;
+  }
+  ```
+
+  so **a building shadow goes to list 61**, not 63, and the split is on the *primitive*, never on
+  the shader. All three lists are drawn by the same two-pass renderer (§4).
 * `GamePlayScene::AddRenderable` additionally calls `0x475760` for a building shadow, which walks
   the scene and re-applies `SetLayer(2)` — belt and braces. **[V]**
 
@@ -441,14 +457,16 @@ Consequences, in the order they matter:
 ## 6. What the viewer implements (2026-09-17)
 
 `renderer/shadow.{h,cpp}`: `renderer::ShadowLoader` + `renderer::ShadowRenderable` per §3 —
-the chunk, the composite, layer 2 on every shadow primitive, `doDistanceTest = false` for building
-shadows, element 0 = the composite, `Display` = the base `Renderable::Display` gated on
-`g_buildingShadowsEnabled` (retail `g_byte[0x7c0b46]`, = 1). Their primitives reach display list
-63, which the viewer renders as an ordinary list — with no `ShadowMeshLoader` (chunk 0x0001001a is
-not loaded) the composites resolve to nothing, so **the building shadows of §2/§4 are loaded but
-not drawn**. Drawing them needs, in order: a `ShadowMesh` loader (`0x00010005` + `0x0001001b`), a
-silhouette+extrusion step per frame from `LightManager`'s sun, and the two-pass stencil + wash of
-§4. None of that exists yet.
+the chunk, the composite, layer 2 and `isBuildingShadow` on every shadow primitive,
+`doDistanceTest = false` for building shadows, element 0 = the composite, `Display` = the base
+`Renderable::Display` gated on `g_buildingShadowsEnabled` (retail `g_byte[0x7c0b46]`, = 1), and
+the layer-2 case of `AddContainerElement` fixed to retail's three-way split (61 for a building
+shadow). With no `ShadowMeshLoader` (chunk 0x0001001a is not loaded) the composites resolve to
+nothing — 0 of the 55 drawables of `havana_02_shadow`, and nothing at all reaches lists 61..64 —
+so **the building shadows of §4 are loaded but not drawn**. Drawing them needs, in order: a
+`ShadowMesh` loader (`0x00010005` + `0x0001001b`), a silhouette+extrusion step per frame from
+`LightManager`'s sun with the 6 m volume length, and the two-pass stencil + wash of §4. None of
+that exists yet.
 
 The shadow decals of §1 *are* drawn: lists 7/8/77 are on by default,
 `Display_List::RenderShadowDecals_7_8_77` follows §1.2 (z-write off, cull 7/8, container fade on
