@@ -686,6 +686,11 @@ ViewTab(void)
 			ImGui::Checkbox(shaderRenderable[i].shader, &shaderRenderable[i].visible);
 		ImGui::TreePop();
 	}
+	if(ImGui::CollapsingHeader("Shadows")) {
+		ImGui::Checkbox("decals darken by coverage squared (retail's mask arithmetic)", &pddiShadowDecal.squareCoverage);
+		ImGui::SliderFloat("decal strength", &pddiShadowDecal.strength, 0.0f, 2.0f, "%.2f");
+		ImGui::TextDisabled("lists 7/8 (decals) can be hidden under display lists below");
+	}
 	if(ImGui::CollapsingHeader("Sky")) {
 		ImGui::Checkbox("draw the sky", &renderer::g_skyEnabled);
 		ImGui::Checkbox("lens flares (no occlusion yet: they shine through everything)", &renderer::g_skyLensFlares);

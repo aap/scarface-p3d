@@ -57,7 +57,8 @@ void InitGL(void* loadproc);
 void InitScene(void);
 void RenderScene(void);
 void Screenshot(const char *path);
-void JumpCamera(const char *spec);	// "x y z", keeps the view direction
+void JumpCamera(const char *spec);
+void PrintCamera(void);	// 'c': a paste-able P3D_CAMPOS/P3D_CAMTARGET line, also on the clipboard	// "x y z", keeps the view direction
 
 struct LoadedFile {
 	std::string name;

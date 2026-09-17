@@ -449,6 +449,21 @@ InitScene(void)
 }
 
 void
+PrintCamera(void)
+{
+	char line[512];
+	const Vector &p = camera.m_position, &t = camera.m_target;
+	std::string zones;
+	for(renderer::StreamTrigger *tr : StreamingCurrent())
+		if(zones.find(tr->tag) == std::string::npos) zones += (zones.empty() ? "" : ",") + tr->tag;
+	snprintf(line, sizeof(line), "P3D_CAMPOS=\"%.1f %.1f %.1f\" P3D_CAMTARGET=\"%.1f %.1f %.1f\"   # native %.0f %.0f %.0f  zones %s",
+		p.x, p.y, p.z, t.x, t.y, t.z, -p.x, p.y, p.z, zones.c_str());
+	printf("%s\n", line);
+	fflush(stdout);
+	SDL_SetClipboardText(line);
+}
+
+void
 JumpCamera(const char *spec)
 {
 	Vector p;
@@ -626,6 +641,11 @@ HandleSDLEvent(SDL_Event *event, bool ignoreMouse, bool ignoreKeybaord)
 		// 'e' hides/shows the GUI, also when a window has focus (but not while typing in one)
 		if(event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_e && !ImGui::GetIO().WantTextInput) {
 			guiVisible = !guiVisible;
+			break;
+		}
+		// 'c' prints the camera as a paste-able line (and puts it on the clipboard)
+		if(event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_c && !ImGui::GetIO().WantTextInput) {
+			PrintCamera();
 			break;
 		}
 		if(ignoreKeybaord) break;

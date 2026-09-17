@@ -8,6 +8,7 @@ namespace pure3d
 {
 
 pddiDebugOptions pddiDebug = { false, false, false, false };
+pddiShadowDecalOptions pddiShadowDecal = { true, 0.75f };	// strength: a guess between the full mask and the 0xff808080 wash of the End pass [?]
 
 bool pddiInstancedDepthPass;
 

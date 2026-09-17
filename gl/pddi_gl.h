@@ -284,6 +284,8 @@ class glState
 	i32 u_lightRange;
 	i32 u_debug;
 	i32 u_vertexFade;
+	i32 u_shadowDecal;
+	Vector4 shadowDecal;		// x: enable (alpha = coverage^2 * strength), y: strength
 	i32 u_fade;
 	i32 u_lit;
 	i32 u_fogColour;
@@ -310,6 +312,7 @@ public:
 	void SetMaterial(bool isLit, bool twoSided, const MaterialColours &colors);
 	// TODO: more
 	void SetTexture(pddiTexture *tex);
+	void SetShadowDecal(bool enable) { shadowDecal = Vector4(enable ? 1.0f : 0.0f, pddiShadowDecal.strength, pddiShadowDecal.squareCoverage ? 1.0f : 0.0f, 0.0f); }
 	void SetVertexFade(float start, float end, bool enable) { vertexFade = Vector4(start, end, enable ? 1.0f : 0.0f, 0.0f); }
 	// the per-primitive cross-fade of PDDI_SP_FADE, 0 = opaque, 1 = gone
 	void SetFade(float f) { fade = f < 0.0f ? 0.0f : f > 1.0f ? 1.0f : f; }

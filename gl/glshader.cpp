@@ -206,6 +206,9 @@ glShadowDecalShader::SetPass(i32 pass)
 	glShader::SetPass(pass);
 	if(blendMode == PDDI_BLEND_ALPHA)
 		state->SetAlphaTest(true, PDDI_COMPARE_GREATER, 0.0f);
+	// retail: the decals go into a cleared alpha mask by alpha blending, which squares
+	// the coverage, and the frame is multiplied by the mask (re/notes/shadows.md)
+	state->SetShadowDecal(true);
 	context->SetZWrite(false);
 }
 

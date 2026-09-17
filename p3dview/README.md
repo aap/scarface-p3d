@@ -11,6 +11,12 @@ make -f Makefile.gl -j8         # the engine + renderer -> p3d_gl.a
 make -C p3dview -j8             # the viewer (needs SDL2 and imgui; IMGUI_DIR in p3dview/Makefile)
 ```
 
+## Keys
+
+`e` hides and shows the imgui windows. `c` prints the camera as a line you can paste back
+(`P3D_CAMPOS="…" P3D_CAMTARGET="…"   # native x y z  zones …`) and puts it on the clipboard.
+ctrl+click picks an object. WASD moves, the mouse looks.
+
 ## Run
 
 ```sh

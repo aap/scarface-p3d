@@ -10,6 +10,7 @@
 
 #include "display_list.h"
 #include "renderable.h"
+#include "lighting.h"
 #include "../shader.h"
 #include "../pddi.h"
 #include <stdlib.h>
@@ -974,7 +975,10 @@ nlists = 0;
 	context->SetZWrite(true);
 	// 14. night lights, z-write off, fog forced off
 	context->SetZWrite(false);
-	RenderNightLights11();
+	// retail: env->isNight (0x46aec0: ms of day < 6:00 or > 18:00) gates the night
+	// lights and the cards; the fade-in it also starts is not done here
+	bool night = gLightManager == nil || gLightManager->timeOfDay < 6.0f || gLightManager->timeOfDay > 18.0f;
+	if(night) RenderNightLights11();
 	context->SetZWrite(true);
 	// 15. instanced eco props
 	RenderInstanced72();
@@ -985,7 +989,7 @@ nlists = 0;
 	RenderLit_29_50();
 	// 17. cards-night, z-write off
 	context->SetZWrite(false);
-	RenderCardsNight12();
+	if(night) RenderCardsNight12();
 	context->SetZWrite(true);
 	// 18. (B) the unclassified fading world
 	if(!indoors) RenderOutdoor_54();

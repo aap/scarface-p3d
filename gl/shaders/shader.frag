@@ -14,6 +14,7 @@ uniform vec4 u_fade;
 // pddiContext::SetFog(colour, start, end) / EnableFog
 uniform vec4 u_fogColour;	// rgb: the fog colour, a: 0 = fog off
 uniform vec4 u_fogRange;	// x: start, y: end, z: FogClamp/255, w: apply the clamp
+uniform vec4 u_shadowDecal;	// x: a shadow decal, y: strength, z: square the coverage
 
 void DoAlphaTest(float a)
 {
@@ -30,6 +31,8 @@ main(void)
 	if(u_debug.z > 0.0) tex = vec4(1.0, 1.0, 1.0, tex.a);
 	vec4 color = v_color*tex;
 	DoAlphaTest(color.w);
+	if(u_shadowDecal.x > 0.0)
+		color.a *= (u_shadowDecal.z > 0.0 ? color.a : 1.0) * u_shadowDecal.y;
 	// the cross-fade goes in after the alpha test, so that an alpha-tested surface
 	// keeps exactly the pixels it had (retail instead scales the test threshold down
 	// as the fade rises, notes/shaderstate.md)

@@ -328,6 +328,16 @@ public:
 extern pddiDevice *device;
 
 // debug rendering options (viewer): honoured by the backend shaders
+// not a debug option: how the static shadow decals darken the frame. Retail blends
+// them into a cleared alpha mask and multiplies the frame by it (re/notes/shadows.md),
+// which makes a decal of coverage c darken by c*c; `strength` scales that.
+struct pddiShadowDecalOptions
+{
+	bool squareCoverage;	// c*c like the mask arithmetic (default), else c
+	float strength;		// 0.75, a guess: retail's End pass washes with 0xff808080 [?]; View tab > Shadows
+};
+extern pddiShadowDecalOptions pddiShadowDecal;
+
 struct pddiDebugOptions
 {
 	bool noTextures;	// sample white instead of the texture
