@@ -15,6 +15,7 @@ the reasoning behind them is in `re/notes/` (start with `displaylist.md`, then
 | `display_list.*` | `Display_List`, `DisplayListNode` | the retained draw list, 84 buckets |
 | `view.*` | `Camera`, `View_Get/SetRenderingCamera`, `View_Get/SetCullingCamera` | where we look from, and the frustum |
 | `worldgeo.*`, `zonepkg.*`, `instance.*`, `sky.*` | `WorldGeoRenderable`, `ZonePkgRenderable`, `InstanceRenderable`, `SkyRenderable` and their chunk loaders | the four renderable classes the viewer actually loads |
+| `shadow.*` | `ShadowRenderable`, `ShadowLoader` | the 0x08800008 building shadow composites (loaded, not drawn — see below) |
 | `lighting.*` | `LightingRenderable`, `SFLightGroupLoader`, `LightManager` | which of the game's own lights the frame is lit with |
 | `render_manager.*` | `FogParameters`, `EnvManager` | the distance fog, per time of day |
 
@@ -183,6 +184,41 @@ no specular; `re/notes/ocean.md` §6 lists every deviation, including the two an
 knobs the missing mip maps force on us. View tab > Ocean has the switches (and a live table of
 the sixteen trains), `renderer::g_oceanEnabled` is the master one.
 
+## The static shadows
+
+Three unrelated things (`re/notes/shadows.md` has the whole reversal):
+
+1. **The shadow decals** — the dark blobs baked into the ground geometry under trees,
+   awnings and walls, as prim groups whose pddi shader is `shadowdecal`. `WorldGeoLoader`
+   puts them on layer 37, so they land in display lists **7**, **8** (while their world geo
+   cross-fades) and **77**, and `Display_List::RenderShadowDecals_7_8_77` draws them with
+   z-write off after the decals and before the lit world. **These are on by default.**
+   Retail brackets the pass with `pddiExtStaticShadowGen::Begin/End` (pddi extension
+   `0x108`) and accumulates it as an *alpha mask* in a screen-sized `D3DFMT_A8R8G8B8` render
+   target, then multiplies the frame by that mask with one fixed-function full-screen quad
+   (`SRCBLEND ZERO`, `DESTBLEND SRCALPHA`). We have no render target, so the decals blend
+   straight onto the ground with their own alpha — the same arithmetic for a single decal
+   layer, since `dest *= (1-a)` is `mix(dest, black, a)` and the decal textures are black
+   shapes with alpha = coverage. What the mask buys retail is that overlapping decals do not
+   darken twice and that nothing drawn later in the frame can paint over them.
+2. **The building shadows** — the 44 `0x08800008` `*_shadow` composites, one per shell that
+   casts them. `shadow.*` loads them the way retail does (layer 2 and `isBuildingShadow` on
+   every primitive, no distance test, element 0 = the composite, `Display` gated on
+   `g_buildingShadowsEnabled` = retail's `g[0x7c0b46]`), and the layer-2 case of
+   `AddContainerElement` routes them to list **61**. They draw nothing: their drawables are
+   `0x0001001a` `pure3d::ShadowMesh` chunks — closed shells plus `0x0001001b` edge topology,
+   i.e. **stencil shadow volumes**, extruded per frame away from the sun with a 6 m volume
+   length and drawn in two cull/stencil passes plus a `0xff191919` wash. Nothing of that
+   exists here, so the composites resolve to zero drawables (`P3D_VERBOSE` prints the
+   count) and lists 61..64 stay empty.
+3. The blob shadows under cars and NPCs, which need a car or an NPC.
+
+Why the decals used to cut off hard, in order: 397 of the 408 geometries that carry a
+shadowdecal prim group are `details_` world geo, i.e. the **120 m** band with a 20 m fade;
+the viewer had **no** cross-fade at all until `PDDI_SP_FADE` (`gl/glshader.cpp`), so that
+20 m band was a one-frame pop; and only 47 of the 220 z04 packages have any shadow decals in
+the first place, which is simply how the map was authored.
+
 ## The 84 lists
 
 The `layer` (0..44) baked into each `DrawablePrimitive` at load time is a *material class*
@@ -202,7 +238,7 @@ state once per bucket instead of once per object. Roughly:
 | interior floors | 33, 34 | unlit alpha blend |
 | specular road/ground | 13, 15 (fading 14, 16) | drawn twice, early and again after the shadow volumes |
 | decals | 3, 4, 17, 18, 75 (fading 5, 6, 19, 20) | z-write off |
-| shadows | 7, 8, 77 (decals), 61..64 (stencil volumes) | |
+| shadows | 7, 8, 77 (decals, drawn), 61..64 (stencil volumes, empty) | see "The static shadows" |
 | environment / reflection | 9, 10 | stencil tested, z-write and alpha-write off |
 | night lighting | 11, 12 | z-write off, fog forced off |
 | instanced eco props | 72, 73, 74 | the pddi instancing extension in retail |
@@ -318,10 +354,12 @@ the colour, the start and end and the "game values" switch (off = edit them by h
 ## What is deliberately missing
 
 No reflection pass, no occluders (`occlude::IsBoxVisible` is a hook that always says
-"visible"), no per-object light sets (see Lighting above), no stencil shadow volumes, no
-shader-mode extension (`ext(0x10b)`) and no hardware instancing — the eco props are drawn
-one placement at a time. Only the two ends of a primitive fade (0 and 1) are honoured, not
-the middle. In the sky, the uv atlas animation of `0x00017008`, the `0x1700d` size scale
+"visible"), no per-object light sets (see Lighting above), no stencil shadow volumes and no
+`ShadowMesh` loader (see The static shadows), no shader-mode extension (`ext(0x10b)`) and no
+hardware instancing — the eco props are drawn one placement at a time. The per-primitive
+fade reaches the shaders as `PDDI_SP_FADE` and is applied after the alpha test, so the
+blended lists cross-fade but a fading *opaque* primitive is still drawn at full strength
+until it is gone (retail switches it to alpha blending). In the sky, the uv atlas animation of `0x00017008`, the `0x1700d` size scale
 of a cut-off quad and the occlusion query the sun flares use are still missing
 (`re/notes/sky.md` §6). The indoor/outdoor deferral of group (B) in `Render()` exists but
 `Display_List::cameraIndoors` is never set. `RenderManager::GetHeap` returns nil: there are
