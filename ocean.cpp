@@ -179,6 +179,7 @@ Ocean::Ocean(void)
    // the sky the reflection pass would sample, divided by the template's 0.25 so that
    // reflectionColourScale still reads through as the game wrote it
    reflectionColour(1.6f, 2.4f, 3.6f),
+   waterAlpha(0.8f),
    projectedGrid(true),
    levelOfDetail(1),
    gridCells(128),
@@ -370,8 +371,11 @@ Ocean::EmitVertex(pddiPrimBufferStream *stream, float x, float z, float taper, f
 	if(elev < 1.0f) fade *= elev;
 
 	stream->Normal(nrm.x, nrm.y, nrm.z);
+	// pass 1 blends the water at waterAlpha; pass 2 gets its own colour stream
+	detailColours.push_back(VertexColour(sBase.x*lit.x*2.0f, sBase.y*lit.y*2.0f,
+	                                     sBase.z*lit.z*2.0f, detailOpacity*fade));
 	stream->Colour(VertexColour(sBase.x*lit.x*2.0f, sBase.y*lit.y*2.0f,
-	                            sBase.z*lit.z*2.0f, detailOpacity*fade));
+	                            sBase.z*lit.z*2.0f, waterAlpha));
 	stream->TexCoord2(x*sTexScale, z*sTexScale);
 	stream->Position(x, y, z);
 }
@@ -421,6 +425,7 @@ Ocean::BuildWorldGrid(void)
 	float ext = farExtent > half*1.5f ? farExtent : half*1.5f;
 	float halfCells = (float)N*0.5f;
 
+	detailColours.clear();
 	pddiPrimBufferStream *stream = primBuffer->Lock();
 	for(i32 j = 0; j <= N; j++)
 		for(i32 i = 0; i <= N; i++) {
@@ -504,6 +509,7 @@ Ocean::BuildProjectedGrid(void)
 	else fwd = fwd/len;
 	Vector right(fwd.z, 0.0f, -fwd.x);
 
+	detailColours.clear();
 	pddiPrimBufferStream *stream = primBuffer->Lock();
 	float A = -3.0f*S;
 	float prevZ = 0.0f;
@@ -584,10 +590,20 @@ Ocean::Display(void)
 	bool zwrite = context->GetZWrite();
 	bool second = shader && detailPass && baseShader;
 	if(baseShader) {
+		baseShader->SetBlendMode(waterAlpha < 0.995f ? PDDI_BLEND_ALPHA : PDDI_BLEND_NONE);
 		context->SetZWrite(!second);
 		context->DrawPrimBuffer(baseShader->GetShader(), primBuffer);
 	}
 	if(second || (baseShader == nil && shader)) {
+		// swap in the detail pass' colours (opacity = DetailOpacity * the fades)
+		if(second && (i32)detailColours.size() == builtVertices) {
+			pddiPrimBufferStream *stream = primBuffer->Lock();
+			for(i32 i = 0; i < builtVertices; i++) {
+				stream->Colour(detailColours[i]);
+				stream->Next();
+			}
+			primBuffer->Unlock(stream);
+		}
 		context->SetZWrite(true);
 		context->DrawPrimBuffer(shader->GetShader(), primBuffer);
 	}

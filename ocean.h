@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vector>
 #include "entity.h"
 #include "gmath.h"
 #include "pddi.h"
@@ -115,6 +116,11 @@ public:
 	// target, so this constant stands in for it. It is PRE-DIVIDED by the template's
 	// 0.25 so that reflectionColourScale still reads through as the game wrote it.
 	Vector reflectionColour;
+	// not retail: the water's own alpha. Retail blends the reflection pass at
+	// ReflectionAlphaScale 0.98 and gets its see-through look from the reflection and
+	// the bump map; without those a flat 0.98 reads as paint, so the viewer lets the sea
+	// bed show through instead.
+	float waterAlpha;
 	// retail: the grid is a projected grid in camera space and Ocean::SetLevelOfDetail
 	// (0x689900) picks one of three static meshes, 50 / 110 / 170 quads across; the
 	// default is the 170 one. We rebuild ours on the CPU every frame, so the middle one
@@ -191,6 +197,7 @@ private:
 	void EmitVertex(pddiPrimBufferStream *stream, float x, float z, float taper, float cell);
 	// the per-frame shading state Display sets up before it walks the grid
 	Vector sBase;		// waterColour * reflectionColour * reflectionColourScale
+	std::vector<pddiColour> detailColours;	// the second pass' per-vertex colour + opacity
 	Vector sAmbient;
 	i32 sNumLights;
 	float sTexScale, sFadeSpan;

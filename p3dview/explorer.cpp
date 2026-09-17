@@ -577,6 +577,9 @@ OceanGUI(void)
 	if(ImGui::ColorEdit4("water colour", col))
 		o->waterColour = pddiColour((u8)(col[0]*255.0f), (u8)(col[1]*255.0f),
 		                            (u8)(col[2]*255.0f), (u8)(col[3]*255.0f));
+	ImGui::SliderFloat("water alpha", &o->waterAlpha, 0.0f, 1.0f, "%.2f");
+	ImGui::SameLine();
+	ImGui::TextDisabled("(not retail: 0.98 with the reflection pass)");
 	ImGui::ColorEdit3("reflection scale", o->reflectionColourScale);
 	ImGui::SameLine();
 	ImGui::TextDisabled("(0.25, 0.23, 0.25)");
