@@ -28,10 +28,21 @@ PrimGroup::~PrimGroup(void)
 	delete[] mBaseUVs;
 }
 
+// retail: PrimGroup::SetFade 0x006a46b0 --- it keeps nothing, it sets the pddi shader's
+// 'FADE' float. The display list walks push the container's fade into every primitive
+// they are about to draw and reset it to 0 afterwards (notes/displaylist.md §4), so the
+// value is per draw, not per primitive.
+void
+PrimGroup::SetFade(float fade)
+{
+	mFade = fade;
+	if(mShader)
+		mShader->SetFloat(PDDI_SP_FADE, fade);
+}
+
 void
 PrimGroup::Display(void)
 {
-	// TODO: a partial fade needs an alpha multiplier in the shaders; 1 is "gone"
 	if(mFade >= 1.0f)
 		return;
 	context->DrawPrimBuffer(mShader->GetShader(), mPrimBuffer);

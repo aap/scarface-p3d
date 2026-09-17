@@ -26,9 +26,8 @@ class PrimGroup : public DrawablePrimitive
 	u32 mUnknown2;		// set from loader unk4
 	pddiPrimBuffer *mPrimBuffer;
 	// retail: DrawablePrimitive vslot 14, pushed in by the display list walks around
-	// the draw (notes/displaylist.md §4). Retail turns it into a shader alpha; we only
-	// honour the "completely gone" end of it, which is what the rainy sky box and a
-	// finished LOD cross-fade need.
+	// the draw (notes/displaylist.md §4). SetFade hands it to the shader as
+	// PDDI_SP_FADE, exactly as retail's PrimGroup::SetFade does.
 	float mFade;
 	// a copy of the COLOURLIST, so that the vertex colour animation can add its
 	// per-frame offsets to it instead of accumulating them
@@ -42,7 +41,8 @@ public:
 
 	virtual u32 GetSomeMask(void) { return 1; }
 	virtual void Display(void);
-	virtual void SetFade(float fade) { mFade = fade; }
+	// retail: PrimGroup::SetFade 0x006a46b0
+	virtual void SetFade(float fade);
 	virtual Shader *GetShader(void) const { return mShader; }
 	virtual void SetShader(Shader *shader);
 	virtual bool IsLit(void);

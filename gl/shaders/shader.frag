@@ -8,6 +8,8 @@ uniform sampler2D tex0;
 
 uniform vec4 u_alphaTest;
 uniform vec4 u_debug;	// z: no textures
+// x: the per-primitive cross-fade of PDDI_SP_FADE as an alpha multiplier, 1 = opaque
+uniform vec4 u_fade;
 
 // pddiContext::SetFog(colour, start, end) / EnableFog
 uniform vec4 u_fogColour;	// rgb: the fog colour, a: 0 = fog off
@@ -28,6 +30,10 @@ main(void)
 	if(u_debug.z > 0.0) tex = vec4(1.0, 1.0, 1.0, tex.a);
 	vec4 color = v_color*tex;
 	DoAlphaTest(color.w);
+	// the cross-fade goes in after the alpha test, so that an alpha-tested surface
+	// keeps exactly the pixels it had (retail instead scales the test threshold down
+	// as the fade rises, notes/shaderstate.md)
+	color.a *= u_fade.x;
 	// D3DFOG_LINEAR: f = (end - d)/(end - start), 1 = unfogged. Fog blends the colour
 	// only; the alpha the frame buffer blends with is untouched.
 	if(u_fogColour.a > 0.0) {
