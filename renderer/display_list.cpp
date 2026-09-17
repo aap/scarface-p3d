@@ -64,7 +64,6 @@ Display_List::Display_List(i32 numNodes)
 		listDirty[i] = false;
 displistvisible[i] = true;
 	}
-displistvisible[7] = displistvisible[8] = false;	// shadows
 displistvisible[9] = displistvisible[10] = false;	// env
 	freeList.Init();
 	for(i32 i = 0; i < numNodes; i++) {
@@ -163,12 +162,20 @@ Display_List::AddContainerElement(DrawableContainer *container, i32 idx, Matrix 
 		}
 		break;
 	case 2:
-		// shadows. retail writes 6.0f into prim->+0x48 (a primitive field, not the
-		// node) and then picks the stencil volume (61) when the primitive has one,
-		// else a projected/blob shadow list depending on the owner being in a room.
-		// We have no ShadowRenderable, so only the 63/64 branches can be reached.
-		prim->SetFade(6.0f);
-		{
+		// Shadows, read off 0x45d66f (re/notes/shadows.md §4). Retail first writes
+		// 6.0f into prim->+0x48 --- SHR's tShadow::SetVolumeLength, the length of the
+		// extruded shadow volume (shadow.hpp: 0 means "guess it from the extruded
+		// bounding volume") --- and then splits three ways on the primitive itself,
+		// NOT on the shader:
+		//   building shadow (prim+0x68, set by ShadowLoader)  -> 61
+		//   a shadow mesh/skin (GetSomeMask() == 0x20)        -> inside a room ? 62 : 63
+		//   anything else (the car/NPC blob quads)            -> inside a room ? 62 : 64
+		// We have no ShadowMesh primitive to give a volume length to, so that write is
+		// left out (it used to go into SetFade, which is a different field and now
+		// reaches the shader as PDDI_SP_FADE).
+		if(prim->isBuildingShadow)
+			listID = 61;
+		else {
 			bool insideRoom = owner && owner->GetOwner() && owner->GetOwner()->isInsideRoom;
 			if(insideRoom)
 				listID = 62;
@@ -696,8 +703,27 @@ Display_List::RenderDecals_3_17_18_4_75(void)
 void Display_List::RenderInteriorFloors_33_34(void)	{ RenderCulledList(33, false); RenderCulledList(34, true); }	// retail: 0x45cfb0
 void Display_List::RenderProjectedShadows62(void)	{ RenderCulledList(62, false); }				// retail: 0x45bce0
 
-// retail: 0x45caf0 --- z-write off for the whole function, gated by the StaticShadowGen
-// extension and by lists 7/8 being non-empty
+// retail: 0x45caf0 --- the static shadow decals: the dark blobs the artists baked into
+// the ground geometry under trees, awnings and walls, as prim groups whose pddi shader is
+// "shadowdecal" (layer 37 -> list 7, or 8 while their world geo cross-fades, plus the
+// layer-1 case in 77). z-write off for the whole function, per-node culling for 7 and 8,
+// the container fade applied to 8 and 77.
+//
+// Retail wraps the whole pass in pddiExtStaticShadowGen::Begin/End (extension 0x108) and
+// draws it into a screen-sized A8R8G8B8 render target with colour write = alpha only;
+// End() then multiplies the frame by that alpha with one full-screen quad
+// (SRCBLEND ZERO, DESTBLEND SRCALPHA). See re/notes/shadows.md §2.
+//
+// NOT retail (the one deviation): we have no render target to accumulate a mask in, so
+// the decals blend straight onto the ground with their own alpha. For a single decal
+// layer that is the same arithmetic --- dest *= (1-a) is mix(dest, black, a) --- and the
+// decal textures are exactly that: black shapes with alpha = coverage. What the mask
+// buys retail is that overlapping decals do not darken twice and that nothing drawn
+// later in the frame can paint over them.
+//
+// Retail also gates the pass on g[0x7bfb55] (1 in the retail image) and on lists 7/8
+// being non-empty, because Begin/End are not free; here the pass costs nothing when the
+// lists are empty and the View tab's per-list switches do the gating.
 void
 Display_List::RenderShadowDecals_7_8_77(void)
 {

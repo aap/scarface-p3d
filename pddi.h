@@ -44,6 +44,11 @@ enum {
 	PDDI_SP_ALPHACOMPARE_THRESHOLD	= FOURCC("ACTH"),
 	PDDI_SP_MULTI_CBV	= FOURCC("MCBV"),
 	PDDI_SP_CBV_BLEND_VALUE	= FOURCC("CBVV"),
+	// the per-primitive cross-fade, 0 = opaque, 1 = gone. retail: PrimGroup::SetFade
+	// (0x006a46b0) sets exactly this float parameter on the pddi shader, and
+	// pure3d::d3dSimpleShader::SetFade (0x00652750) turns it into the 0..255
+	// transparency at d3dShader+0x38 that SetPass blends with (notes/shaderstate.md).
+	PDDI_SP_FADE		= FOURCC("FADE"),
 
 /* unknown */
 	PDDI_SP_ALUM		= FOURCC("ALUM"),

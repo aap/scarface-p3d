@@ -116,6 +116,7 @@ InitApp(void)
 
 	content::loadManager->AddHandler(new renderer::WorldGeoLoader, renderer::Renderable::WORLDGEO_LOADER);
 	content::loadManager->AddHandler(new renderer::ZonePkgLoader, renderer::Renderable::ZONEPKG_LOADER);
+	content::loadManager->AddHandler(new renderer::ShadowLoader, renderer::Renderable::SHADOW_LOADER);
 	content::loadManager->AddHandler(new renderer::SFLightGroupLoader, renderer::Renderable::SFLIGHTGROUP_LOADER);
 	content::loadManager->AddHandler(new renderer::InstanceLoader(renderer::InstanceLoader::SCRIPTOBJECT), renderer::InstanceLoader::SCRIPTOBJECT);
 	content::loadManager->AddHandler(new renderer::InstanceLoader(renderer::InstanceLoader::GAMEGROUP), renderer::InstanceLoader::GAMEGROUP);

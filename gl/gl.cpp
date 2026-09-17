@@ -151,12 +151,14 @@ glState::glState(void)
 	u_lightRange = uniformRegistry.Register("u_lightRange", UNIFORM_VEC4, GL_MAX_LIGHTS);
 	u_debug = uniformRegistry.Register("u_debug", UNIFORM_VEC4);
 	u_vertexFade = uniformRegistry.Register("u_vertexFade", UNIFORM_VEC4);
+	u_fade = uniformRegistry.Register("u_fade", UNIFORM_VEC4);
 	u_lit = uniformRegistry.Register("u_lit", UNIFORM_VEC4);
 	u_fogColour = uniformRegistry.Register("u_fogColour", UNIFORM_VEC4);
 	u_fogRange = uniformRegistry.Register("u_fogRange", UNIFORM_VEC4);
 	isLit = true;
 	isFogged = true;
 	vertexFade = Vector4(0.0f, 0.0f, 0.0f, 0.0f);
+	fade = 0.0f;
 	whiteTex = 0;
 
 	// pddiBaseContext::ResetState (SHR basecontext.cpp): off, white, 0..1000
@@ -201,6 +203,11 @@ glState::Flush(void)
 	Vector4 dbg(pddiDebug.noLighting ? 1.0f : 0.0f, pddiDebug.noVertexColours ? 1.0f : 0.0f, pddiDebug.noTextures ? 1.0f : 0.0f, 0.0f);
 	uniformRegistry.SetUniform(u_debug, &dbg);
 	uniformRegistry.SetUniform(u_vertexFade, &vertexFade);
+	// the per-primitive cross-fade as the shaders want it: an alpha multiplier, so
+	// 1 = opaque. It is applied after the alpha test, which is what keeps it from
+	// changing anything for the opaque and alpha-tested shaders.
+	Vector4 fadev(1.0f - fade, 0.0f, 0.0f, 0.0f);
+	uniformRegistry.SetUniform(u_fade, &fadev);
 	Vector4 lit(isLit ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
 	uniformRegistry.SetUniform(u_lit, &lit);
 	// linear distance fog, exactly the two states d3dContext::SetFog/EnableFog write:

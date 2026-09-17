@@ -34,5 +34,6 @@
 #include "renderer/instance.h"
 #include "renderer/lighting.h"
 #include "renderer/sky.h"
+#include "renderer/shadow.h"
 #include "renderer/ocean.h"
 #include "renderer/render_manager.h"

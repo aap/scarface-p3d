@@ -130,6 +130,9 @@ public:
 	bool alphaTest;
 	pddiCompareMode alphaCompare;
 	float alphaRef;
+	// PDDI_SP_FADE, the per-primitive cross-fade the display list pushes in around the
+	// draw: 0 = opaque, 1 = gone
+	float fade;
 
 	void SetTextureDummy(pddiTexture *tex) {}
 	void SetIntDummy(int val) {}
@@ -156,6 +159,7 @@ public:
 	void SetAlphaTest(int enable) { alphaTest = enable != 0; }
 	void SetAlphaCompare(pddiCompareMode cmp) { alphaCompare = cmp; }
 	void SetAlphaRef(float ref) { alphaRef = ref > 1.0f ? 1.0f : ref < 0.0f ? 0.0f : ref; }
+	void SetFade(float f) { fade = f; }
 
 //	void SetECMD(int val) { ecmd = val; }
 //	void SetSCMD(pddiColour col) { scmd = col; }
@@ -280,12 +284,14 @@ class glState
 	i32 u_lightRange;
 	i32 u_debug;
 	i32 u_vertexFade;
+	i32 u_fade;
 	i32 u_lit;
 	i32 u_fogColour;
 	i32 u_fogRange;
 	bool isLit;			// the shader's PDDI_SP_ISLIT
 	bool isFogged;			// the shader's PDDI_SP_ISFOGGED
 	Vector4 vertexFade;		// x: fade start, y: fade end (m from the camera), z: enable
+	float fade;			// the shader's PDDI_SP_FADE, 0 = opaque, 1 = gone
 	u32 whiteTex;			// bound when a shader has no texture
 
 	pddiColour ambientColour;
@@ -305,6 +311,8 @@ public:
 	// TODO: more
 	void SetTexture(pddiTexture *tex);
 	void SetVertexFade(float start, float end, bool enable) { vertexFade = Vector4(start, end, enable ? 1.0f : 0.0f, 0.0f); }
+	// the per-primitive cross-fade of PDDI_SP_FADE, 0 = opaque, 1 = gone
+	void SetFade(float f) { fade = f < 0.0f ? 0.0f : f > 1.0f ? 1.0f : f; }
 
 	void EnableFog(bool enable) { fogEnabled = enable; }
 	bool IsFogEnabled(void) { return fogEnabled; }

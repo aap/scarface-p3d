@@ -27,6 +27,7 @@ glShader::glShader(void)
 	alphaTest = false;
 	alphaCompare = PDDI_COMPARE_GREATEREQUAL;
 	alphaRef = 0.5f;
+	fade = 0.0f;
 
 	if(simpleProgram == nil) {
 #include "shaders/inc/shader.vert.inc"
@@ -88,6 +89,7 @@ pddiShadeIntTable glShader::glIntTable[] = {
 };
 pddiShadeFloatTable glShader::glFloatTable[] = {
 	{ PDDI_SP_ALPHACOMPARE_THRESHOLD, SHADE_FLOAT(&glShader::SetAlphaRef)  },
+	{ PDDI_SP_FADE, SHADE_FLOAT(&glShader::SetFade)  },
 	{ PDDI_SP_CBV_BLEND_VALUE, SHADE_FLOAT(&glShader::SetFloatDummy)  },
 	{ PDDI_SP_TCI, SHADE_FLOAT(&glShader::SetFloatDummy)  },
 	{ 0, nil }
@@ -128,6 +130,13 @@ glShader::SetPass(i32 pass)
 	else
 		state->SetAlphaTest(alphaTest, alphaCompare, alphaRef);
 	state->SetVertexFade(0.0f, 0.0f, false);
+	// the cross-fade of PDDI_SP_FADE. The shaders apply it to alpha AFTER the alpha
+	// test, so it only bites where something is actually blended --- which is all the
+	// viewer needs for the shadow decals and the other blended fading lists. Retail
+	// goes further and switches a fading OPAQUE shader to alpha blending as well
+	// (d3dSimpleShader::SetPass, notes/shaderstate.md); that is the LOD cross-fade for
+	// solid geometry and is a job of its own.
+	state->SetFade(fade);
 	state->SetFogged(isFogged);
 }
 
